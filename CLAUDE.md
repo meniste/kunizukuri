@@ -13,7 +13,7 @@ Page de travail sur claude.ai : https://claude.ai/artifact/CLhV2JWH68gFYdVze4YpM
 2. Incrémenter le numéro partout : `VERSION` dans `sw.js` **et** le libellé `· version N` dans `index.html` (script en bas de page, visible dans le menu 国).
 3. Commit sur `main` (GitHub Pages publie `main` / racine). Le téléphone récupère la version à la prochaine ouverture avec réseau et se recharge seul.
 4. Republier aussi la page claude.ai (sans le bloc service worker / manifest).
-Version actuelle : **8**.
+Version actuelle : **9**.
 
 ## État du jeu
 - Carte procédurale 96×96 (graine), relief jusqu'à 50 niveaux, rivières qui suivent le courant, mer en bordure, 5 essences de forêt, 18 filons dans des parois de montagne (mines en façade).
@@ -25,6 +25,7 @@ Version actuelle : **8**.
 - Enceinte : cases inaccessibles depuis le bord de carte sans franchir rempart ou rivière (douves) → +1 place par maison, +1 米 par rizière.
 - Maisons (6 modèles), forêts et camp de bûcherons dessinés une fois puis recopiés (cache de sprites) pour les performances.
 - Bâtiments militaires dessinés avec les mêmes outils que les maisons (repère local `HF`, `hbox`, `planks`, `lattice`, `irimoya`…) : tours `TOWERS[0..2]` et remparts/portes en sprites (`blit`, clés `T`, `W<niveau>_<masque>`, `G`), armurerie `drawArmory` (repère `HFat`, dessinée à chaque image). Pierres d'ishigaki : `stoneCourses`.
+- Temple et château détaillés (`drawTempleD`, `drawCastleD`, appelés par `drawGrand`) : dessinés une fois par zoom dans une grande image en cache (`blitBig`, clé `B<type><A>`, repli en dessin direct au-delà de 3000 px). Temple : enceinte ocre à lignes blanches, grand hall, pagode à 5 toits, clocher, fontaine, lanternes, brûle-parfum, torii, porte. Château : douves, talus d'ishigaki, murs à meurtrières, 3 tourelles d'angle, porte-tour, pont, palais, jardin à étang, donjon à 5 niveaux (pignons chidori, kara-hafu, shachihoko).
 - Sauvegarde : `localStorage` clé `kunizukuri5`.
 
 ## Pistes suivantes évoquées
