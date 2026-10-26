@@ -2188,7 +2188,13 @@ requestAnimationFrame(render);
 
 <script>
 // Hors ligne : le service worker garde une copie du jeu et des polices sur l'appareil
-if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+// À chaque ouverture : on vérifie s'il existe une nouvelle version, et on recharge une fois dès qu'elle est prête.
+if ('serviceWorker' in navigator) addEventListener('load', () => {
+  const had = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
+});
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 5'; }).observe(vl,{childList:true}), vl.textContent += ' · version 5';
 </script>
 </body>
 </html>
