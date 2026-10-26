@@ -817,15 +817,30 @@ function pathSamples(L, step){
   else for (const l of L){ const n=Math.round(.5/step); for (let k=0;k<n;k++){ const f=(k+.5)/n*.5; out.push({x:l.du*f, y:l.dv*f, ang:Math.atan2(l.dv,l.du)}); } }
   return out;
 }
-// Passes de couleur superposées, découpées au bord de la parcelle ; rond au centre pour les carrefours et les impasses.
-function strokes(passes, L){
-  ctx.save(); ctx.beginPath(); ctx.rect(-.54,-.54,1.08,1.08); ctx.clip();
-  ctx.lineCap='butt'; ctx.lineJoin='round';
-  for (const [w,c] of passes){
-    planPath(L); ctx.lineWidth=w; ctx.strokeStyle=c; if (L.length) ctx.stroke();
-    if (L.length!==2){ ctx.fillStyle=c; ctx.beginPath(); ctx.arc(0,0,w/2,0,7); ctx.fill(); }
+// Passes de couleur superposées. Chaque bande est remplie comme un polygone calculé ici (segment, secteur
+// d'anneau, branches + disque) plutôt que tracée au trait : le rendu ne dépend plus de la façon dont chaque
+// navigateur gère les extrémités et les découpes de trait (Safari et Chrome donnent exactement la même image).
+function bandPolys(L, w){
+  const S = pathShape(L), h = w/2, X = .54, out = [];
+  const seg = (ax,ay,bx,by) => { const dx=bx-ax, dy=by-ay, l=Math.hypot(dx,dy)||1, nx=-dy/l*h, ny=dx/l*h;
+    out.push([[ax+nx,ay+ny],[bx+nx,by+ny],[bx-nx,by-ny],[ax-nx,ay-ny]]); };
+  if (S.kind==='line'){ const [p,q]=L; seg(p.du*X,p.dv*X,q.du*X,q.dv*X); }
+  else if (S.kind==='arc'){
+    const [p,q]=L, n=24, outer=[], inner=[];
+    for (let k=0;k<=n;k++){ const an=S.a1+S.d*k/n, c=Math.cos(an), s2=Math.sin(an);
+      outer.push([S.cx+(.5+h)*c, S.cy+(.5+h)*s2]); inner.push([S.cx+(.5-h)*c, S.cy+(.5-h)*s2]); }
+    out.push(outer.concat(inner.reverse()));
+    seg(p.du*X,p.dv*X,p.du*.5,p.dv*.5); seg(q.du*.5,q.dv*.5,q.du*X,q.dv*X);   // petits prolongements sous les voisines
   }
-  ctx.restore();
+  else for (const l of L) seg(l.du*X,l.dv*X,0,0);
+  return out;
+}
+function strokes(passes, L){
+  for (const [w,c] of passes){
+    ctx.fillStyle=c;
+    for (const poly of bandPolys(L,w)){ ctx.beginPath(); ctx.moveTo(poly[0][0],poly[0][1]); for (let k=1;k<poly.length;k++) ctx.lineTo(poly[k][0],poly[k][1]); ctx.closePath(); ctx.fill(); }
+    if (L.length!==2){ ctx.beginPath(); ctx.arc(0,0,w/2,0,Math.PI*2); ctx.fill(); }
+  }
 }
 // Bande verticale sur la face avant d'une parcelle (cascade, escalier), vers le voisin (du,dv) situé devant.
 function faceBand(sx,sy,du,dv,g,fn){
