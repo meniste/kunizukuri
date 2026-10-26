@@ -200,7 +200,7 @@ const B = {
   maison:   { k:'家', name:'Maison',           era:1, cost:{bois:8},  cap:4,                   hint:'Loge 4 habitants' },
   bucheron: { k:'木', name:'Bûcheron',         era:1, cost:{bois:6},  workers:2, prod:{bois:5}, hint:'À côté d’une forêt' },
   chemin:   { k:'道', name:'Chemin',           era:2, cost:{bois:1},                           hint:'Monte d’un niveau par case au plus' },
-  pont:     { k:'橋', name:'Pont en bois',     era:2, cost:{bois:6},                           hint:'Sur une rivière' },
+  pont:     { k:'橋', name:'Pont en bois',     era:2, cost:{bois:6},                           hint:'Touchez une rive puis l’autre : le pont enjambe toute l’eau entre les deux' },
   mine:     { k:'鉱', name:'Mine',             era:2, cost:{bois:15}, workers:3, prod:{pierre:4}, hint:'Dans une paroi marquée de filons, reliée par chemin' },
   machiya:  { k:'町', name:'Maison améliorée', era:2, cost:{bois:20,riz:15}, cap:8,            hint:'Remplace une maison, loge 8' },
   temple:   { k:'寺', name:'Temple',          era:3, cost:{bois:260,pierre:180}, workers:4, crew:6, days:8, w:5, h:7, hint:'5×7 cases · +2 places dans les maisons à 10 cases' },
@@ -456,6 +456,44 @@ function canCanal(t){
   if (!afford(CANAL.cost)) return {ok:false,why:`Il faut ${costTxt(CANAL.cost)}.`};
   return {ok:true, src: ok[0]};
 }
+// Pont sur plusieurs cases : d'une rive à l'autre, en ligne droite, au-dessus de l'eau uniquement
+const BRIDGE_MAX = 10;
+let bridgeStart = null;
+const wet = t => t.river || t.water;
+function bridgeSpan(a,b){
+  if (a.x!==b.x && a.y!==b.y) return {ok:false,why:'Le pont va tout droit : touchez une case sur la même ligne.'};
+  const n = Math.max(Math.abs(b.x-a.x),Math.abs(b.y-a.y)), sx=Math.sign(b.x-a.x), sy=Math.sign(b.y-a.y), line=[];
+  for (let k=0;k<=n;k++) line.push(at(a.x+sx*k,a.y+sy*k));
+  let i0=0, i1=line.length-1;
+  if (!wet(line[i0])) i0++; if (i1>=i0 && !wet(line[i1])) i1--;
+  const inner = line.slice(i0,i1+1), banks = [line[0],line[line.length-1]].filter(t=>!wet(t));
+  if (!inner.length) return {ok:false,why:'Il n’y a pas d’eau entre ces deux cases.'};
+  if (inner.some(t=>!wet(t))) return {ok:false,why:'Le pont ne passe qu’au-dessus de l’eau : la terre doit être aux deux bouts.'};
+  if (inner.length>BRIDGE_MAX) return {ok:false,why:`Trop long : ${BRIDGE_MAX} cases d’eau au plus.`};
+  const newBr=[], newRd=[];
+  for (const t of inner){ const j=I(t.x,t.y); const bb=bld.get(j);
+    if (!seen[j]||!terr[j]) return {ok:false,why:'Le pont doit rester sur vos terres.'};
+    if (bb && bb.type!=='pont') return {ok:false,why:'Quelque chose bloque le passage.'};
+    if (!bb) newBr.push(t); }
+  for (const t of banks){ const j=I(t.x,t.y), bb=bld.get(j);
+    if (!seen[j]||!terr[j]) return {ok:false,why:'Les deux rives doivent être sur vos terres.'};
+    const w = inner[t===line[0]?0:inner.length-1];
+    if (t.h - w.h > 4) return {ok:false,why:'Rive trop haute : 4 niveaux au plus au-dessus de l’eau.'};
+    if (!bb && !occ.has(j) && canBuild('chemin',t).ok) newRd.push(t);
+    else if (!bb || !isRoad(bb)) { if (bb || occ.has(j)) return {ok:false,why:'Une rive est occupée : il faut un chemin ou un terrain libre.'}; } }
+  const cost = { bois: newBr.length*B.pont.cost.bois + newRd.length*B.chemin.cost.bois };
+  if (!newBr.length) return {ok:false,why:'Le pont existe déjà.'};
+  if (!afford(cost)) return {ok:false,why:`Il faut ${costTxt(cost)}.`};
+  return {ok:true, line, newBr, newRd, cost};
+}
+function buildSpan(a,b){
+  const r = bridgeSpan(a,b); if (!r.ok){ toast(r.why); return false; }
+  pay(r.cost);
+  for (const t of r.newBr) bld.set(I(t.x,t.y),{type:'pont',lvl:1,state:'ok'});
+  for (const t of r.newRd){ bld.set(I(t.x,t.y),{type:'chemin',lvl:1,state:'ok'}); if (t.forest){ t.forest=false; t.cleared=true; paint(t); } }
+  toast(r.newBr.length>1 ? `Pont de ${r.newBr.length} cases construit` : 'Pont construit');
+  allocate(); refreshUI(); save(); dirty=true; return true;
+}
 const pay = c => { for (const [k,v] of Object.entries(c)) res[k]-=v; };
 
 function upCost(b){
@@ -496,8 +534,8 @@ function canBuild(tl,t){
   if (!terr[i]) return {ok:false,why:'Hors de vos terres. Plus tard, l’armée permettra de les agrandir.'};
   if (b) return {ok:false,why:`Il y a déjà ${B[b.type].name.toLowerCase()} ici.`};
   if (occ.has(i)) return {ok:false,why:`Cette case fait partie d’un ${B[bld.get(occ.get(i)).type].name.toLowerCase()}.`};
-  if (t.water) return {ok:false,why:'On ne construit pas en mer.'};
-  if (tl==='pont'){ if (!t.river) return {ok:false,why:'Un pont se pose sur une rivière.'}; }
+  if (t.water && tl!=='pont') return {ok:false,why:'On ne construit pas en mer.'};
+  if (tl==='pont'){ if (!t.river && !t.water) return {ok:false,why:'Un pont se pose au-dessus de l’eau.'}; }
   else if (t.river) return {ok:false,why: tl==='chemin' ? 'Il faut un pont pour traverser.' : 'Pas sur la rivière.'};
   if (tl==='mine'){ if (!t.ore) return {ok:false,why:'Les mines s’ouvrent dans une paroi marquée de pierres colorées.'}; }
   else if (t.ore) return {ok:false,why:'Ce filon est réservé à une mine.'};
@@ -1754,8 +1792,9 @@ function draw(now,tm){
 
   ctx.setTransform(dpr*zoom,0,0,dpr*zoom, dpr*(W/2-cam.x*zoom), dpr*(H/2-cam.y*zoom));
   const vl = cam.x - W/2/zoom - TW, vr = cam.x + W/2/zoom + TW, vt = cam.y - H/2/zoom - TH, vb = cam.y + H/2/zoom + TH;
-  const prev = tool!=='look' && hover ? canBuild(tool,hover) : null;
+  const prev = tool!=='look' && hover ? (tool==='pont' && bridgeStart ? bridgeSpan(bridgeStart,hover) : canBuild(tool,hover)) : null;
   const fpSet = new Set(); if (hover && isBig(tool)){ const fp=footprint(tool,hover.x,hover.y); if (fp) for (const f of fp) fpSet.add(f); }
+  if (tool==='pont' && bridgeStart){ fpSet.add(bridgeStart); if (hover && (hover.x===bridgeStart.x || hover.y===bridgeStart.y)){ const n=Math.max(Math.abs(hover.x-bridgeStart.x),Math.abs(hover.y-bridgeStart.y)); for (let k=0;k<=n;k++) fpSet.add(at(bridgeStart.x+Math.sign(hover.x-bridgeStart.x)*k, bridgeStart.y+Math.sign(hover.y-bridgeStart.y)*k)); } }
   const selSet = new Set(); if (selected){ const r=rootOf(I(selected.x,selected.y)); if (occ.has(r)) for (const f of bigTiles(r)) selSet.add(f); }
   const exAt = new Map();
   for (const e of explorers){ const c = e.cur ?? e.pos, k = Math.min(e.path.length-1, Math.round(c)); exAt.set(e.path[k], e); }
@@ -1863,12 +1902,12 @@ function updateTools(){
   if (tool==='look'){ pill.hidden = true; return; }
   const d = toolDef(tool);
   const c = tool==='ameliorer' ? 'touchez une maison, une mine ou un chemin' : tool==='defricher' ? 'touchez une forêt' : tool==='canal' ? `${costTxt(d.cost)} · à côté de l’eau` : tool==='demolir' ? 'touchez un bâtiment' : d.w ? `${d.w}×${d.h} · lancer le chantier`
-    : tool==='explorer' ? `${costTxt(d.cost)} · touchez la destination` : costTxt(d.cost);
+    : tool==='explorer' ? `${costTxt(d.cost)} · touchez la destination` : tool==='pont' ? (bridgeStart ? 'touchez l’autre rive' : `${costTxt(d.cost)} par case · touchez une rive`) : costTxt(d.cost);
   pill.innerHTML = `<span class="k">${d.k}</span><span>${d.name}</span><span class="c">${c}</span><button type="button" aria-label="Arrêter">✕</button>`;
   pill.hidden = false;
   pill.querySelector('button').onclick = ()=>setTool('look');
 }
-function setTool(id){ tool=id; if (id!=='look'){ selected=null; villageOpen=false; showInfo(); } updateTools(); dirty=true; }
+function setTool(id){ tool=id; bridgeStart=null; if (id!=='look'){ selected=null; villageOpen=false; showInfo(); } updateTools(); dirty=true; }
 function setPalette(open){ paletteOpen=open; $('tools').hidden=!open; $('buildBtn').setAttribute('aria-expanded',open); if(open) setMenu(false); }
 function setMenu(open){ $('menu').hidden=!open; $('menuBtn').setAttribute('aria-expanded',open); }
 let goalsLeft = 0;
@@ -2062,7 +2101,13 @@ function endPtr(e,cancel){
     setPalette(false); setMenu(false);
     if (t){
       if (e.pointerType!=='mouse') hover=t;
-      if (tool!=='look'){ if (act(tool,t) && tool==='explorer') setTool('look'); }
+      if (tool==='pont'){
+        if (!bridgeStart){
+          if (!wet(t) && !NB.some(([dx,dy])=>{ const n=at(t.x+dx,t.y+dy); return n && wet(n); })) toast('Commencez au bord de l’eau ou sur l’eau.');
+          else { bridgeStart=t; updateTools(); }
+        } else { const a=bridgeStart; bridgeStart=null; if (a===t) act('pont',t); else buildSpan(a,t); updateTools(); }
+      }
+      else if (tool!=='look'){ if (act(tool,t) && tool==='explorer') setTool('look'); }
       else { const r = tiles[rootOf(I(t.x,t.y))]; selected = (selected===r) ? null : r; villageOpen=false; showInfo(); }
       dirty=true;
     }
