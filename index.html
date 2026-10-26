@@ -1119,7 +1119,7 @@ function badgeAt(x,y){
   ctx.fillStyle='#b4462e'; ctx.beginPath(); ctx.arc(x,y,3.6,0,7); ctx.fill();
   ctx.fillStyle='#fff'; ctx.font='700 5.5px system-ui'; ctx.textAlign='center'; ctx.fillText('!',x,y+2);
 }
-/* --- Armée : tour de guet, rempart, porte --- */
+/* --- Armée : tours de guet, remparts, portes et armurerie, dessinés comme les maisons (repère local, cache d'images) --- */
 function yagura(tu,tv,s,dz,legH,roofCol=TILE){
   ctx.strokeStyle='#4a2f1a'; ctx.lineWidth=1.2; ctx.beginPath();
   for (const [a,b] of [[-s,-s],[s,-s],[s,s],[-s,s]]){ ctx.moveTo(...V(tu+a,tv+b,dz)); ctx.lineTo(...V(tu+a*.75,tv+b*.75,dz+legH)); }
@@ -1127,78 +1127,319 @@ function yagura(tu,tv,s,dz,legH,roofCol=TILE){
   ctx.stroke();
   vbox(tu-s*.8,tu+s*.8,tv-s*.8,tv+s*.8,dz+legH,dz+legH+1.6,'#8a6440','#6e4f33','#7f5c3b');
   VQ([[tu+s*.8,tv-s*.4,dz+legH+.4],[tu+s*.8,tv+s*.4,dz+legH+.4],[tu+s*.8,tv+s*.4,dz+legH+1.2],[tu+s*.8,tv-s*.4,dz+legH+1.2]],'#2a1d12');
-  VQ([[tu-s*.4,tv+s*.8,dz+legH+.4],[tu+s*.4,tv+s*.8,dz+legH+.4],[tu+s*.4,tv+s*.8,dz+legH+1.2],[tu-s*.4,tv+s*.8,dz+legH+1.2]],'#2a1d12');
   vroof(tu-s*1.15,tu+s*1.15,tv-s*1.15,tv+s*1.15,dz+legH+1.6,1.8,roofCol);
   banner(tu+s*.5,tv+s*.5,dz+legH+1.6,'#b4462e');
 }
-function drawWatch(t,b){
-  const [u,v]=rotXY(t.x,t.y), z=t.h, lv=lvlOf(b), [sx,sy]=V(u,v,z);
-  ctx.fillStyle='rgba(20,16,12,.3)'; ctx.beginPath(); ctx.ellipse(sx,sy+1,TW*.32,TH*.32,0,0,7); ctx.fill();
-  let top;
-  if (lv===1){ yagura(u,v,.3,z,5,THATCH); top=z+9.5; }
-  else if (lv===2){ vbatter(u-.42,u+.42,v-.42,v+.42,z,z+2.4,.1,'#bdb7a8','#8f8a7f','#a39e92'); yagura(u,v,.27,z+2.4,2.8); top=z+8.8; }
-  else { vbatter(u-.44,u+.44,v-.44,v+.44,z,z+2.2,.1,'#bdb7a8','#8f8a7f','#a39e92');
-    hall(u-.3,u+.3,v-.3,v+.3,z+2.2,{base:0,wall:1.8,rise:1.4,mid:1.1,over:.22,wallR:'#e9e3d7',wallL:'#f3eee4'});
-    banner(u+.33,v-.1,z+2.2,'#b4462e'); top=z+9.5; }
-  if (b.state!=='ok'){ const [x,y]=V(u,v,top); badgeAt(x,y); }
+// Repère local décalé (pour un grand bâtiment posé sur la carte)
+function HFat(A,ou,ov,oz){ const L=(a,b,z)=>A?V(ou+a,ov+b,oz+z):V(ou+b,ov+a,oz+z);
+  return { A, L, uv:(a,b)=>A?[ou+a,ov+b]:[ou+b,ov+a], Q:(pts,fill)=>poly(pts.flatMap(p=>L(...p)),fill), kA:A?.8:.95, kB:A?.95:.8 }; }
+// Pierres appareillées sur une face : P(t,z) donne le point de la face (t de 0 à 1), len sa longueur en cases
+function stoneCourses(P,len,z0,z1,k,seed,base='#aba596'){
+  const rows=Math.max(2,Math.round((z1-z0)/.34));
+  ctx.strokeStyle='rgba(48,42,34,.55)'; ctx.lineWidth=.28;
+  for (let r=0;r<rows;r++){ const za=z0+(z1-z0)*r/rows, zb=z0+(z1-z0)*(r+1)/rows;
+    let t=0, j=0; const off=.35+.5*hash(seed+r*7,r+3);
+    while (t<1-1e-6){ let w=(.1+.13*hash(seed+r*13+j,j*5+r+seed))/Math.max(.05,len); if (j===0) w*=off;
+      const t2=Math.min(1,t+w), tone=.88+.2*hash(seed*3+j*7+r,r*11+j);
+      const p=[P(t,za),P(t2,za),P(t2,zb),P(t,zb)];
+      ctx.beginPath(); ctx.moveTo(...p[0]); for (const q of p.slice(1)) ctx.lineTo(...q); ctx.closePath();
+      ctx.fillStyle=shade(base,k*tone); ctx.fill(); ctx.stroke(); t=t2; j++; } }
 }
+// Talus de pierre (ishigaki) en repère local : faces +a et +b, base large, sommet en retrait
+function hbatter(h,a0,a1,b0,b1,z0,z1,ins,seed=1){
+  const f = z => ins*(z-z0)/(z1-z0);
+  stoneCourses((t,z)=>h.L(a1-f(z), b0+f(z)+(b1-b0-2*f(z))*t, z), b1-b0, z0, z1, h.kA, seed);
+  stoneCourses((t,z)=>h.L(a0+f(z)+(a1-a0-2*f(z))*t, b1-f(z), z), a1-a0, z0, z1, h.kB, seed+17);
+  h.Q([[a0+ins,b0+ins,z1],[a1-ins,b0+ins,z1],[a1-ins,b1-ins,z1],[a0+ins,b1-ins,z1]], shade('#b8b2a3',1.04));
+  ctx.strokeStyle='rgba(255,250,235,.35)'; ctx.lineWidth=.45; ctx.beginPath(); ctx.moveTo(...h.L(a1,b1,z0)); ctx.lineTo(...h.L(a1-ins,b1-ins,z1)); ctx.stroke();
+}
+// Garde-corps sur les deux bords visibles d'une plateforme
+function hrail(h,a0,a1,b0,b1,z,hg,col){
+  const n=Math.max(2,Math.round((a1-a0)*9));
+  for (const f of [FA(h,b0,b1,a1),FB(h,a0,a1,b1)]){ for (let k=0;k<=n;k++) fline(f,k/n,z,k/n,z+hg,col,.45); fline(f,0,z+hg,1,z+hg,col,.65); fline(f,0,z+hg*.45,1,z+hg*.45,col,.35); }
+}
+// Bannière nobori : mât, traverse, étoffe, blason
+function nobori(h,a,b,z0,H,col,mark){
+  const [x0,y0]=h.L(a,b,z0), [x1,y1]=h.L(a,b,z0+H);
+  ctx.strokeStyle='#3a2a1c'; ctx.lineWidth=.55; ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1-1); ctx.stroke();
+  ctx.lineWidth=.4; ctx.beginPath(); ctx.moveTo(x1,y1+.3); ctx.lineTo(x1+3.3,y1+.3); ctx.stroke();
+  ctx.fillStyle=col; ctx.fillRect(x1+.35,y1+.55,2.8,10.5);
+  ctx.fillStyle='rgba(0,0,0,.14)'; ctx.fillRect(x1+2.45,y1+.55,.7,10.5);
+  if (mark){ ctx.fillStyle=mark; ctx.beginPath(); ctx.arc(x1+1.75,y1+3.2,1,0,7); ctx.fill(); ctx.fillRect(x1+1.45,y1+5.2,.6,4.4); }
+}
+// Cloche d'alarme (hanshō) suspendue
+function hbell(h,a,b,z){ const [x,y]=h.L(a,b,z);
+  ctx.strokeStyle='#2e2116'; ctx.lineWidth=.3; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+.8); ctx.stroke();
+  poly([x-.55,y+.8, x+.55,y+.8, x+.95,y+3, x-.95,y+3],'#6f6a3c'); ctx.fillStyle='#a39a5a'; ctx.fillRect(x-.95,y+2.6,1.9,.4); ctx.fillRect(x-.15,y+1.1,.3,1.2); }
+function hladder(h,a,bLo,bHi,z0,z1){
+  ctx.strokeStyle=shade('#6b4a2a',h.kB); ctx.lineWidth=.5; ctx.beginPath();
+  for (const o of [-.07,.07]){ ctx.moveTo(...h.L(a+o,bLo,z0)); ctx.lineTo(...h.L(a+o,bHi,z1)); }
+  for (let z=z0+.35; z<z1; z+=.42){ const b=bLo+(bHi-bLo)*(z-z0)/(z1-z0); ctx.moveTo(...h.L(a-.07,b,z)); ctx.lineTo(...h.L(a+.07,b,z)); }
+  ctx.stroke(); }
+function hsmoke(x,y,s=1){ for (const [k,r] of [[0,1.4],[1,1.9],[2,2.5]]){ ctx.fillStyle=`rgba(214,208,196,${.55-k*.15})`; ctx.beginPath(); ctx.arc(x+k*1.2*s,y-k*2.6*s,r*s,0,7); ctx.fill(); } }
+
+const TOWERS = [
+  // 1 · Tour de guet en rondins : pieds contreventés, échelle, plateforme à garde-corps, vigie en planches, chaume, cloche
+  h => { shadowH(h,-.4,.4,-.4,.4);
+    const T=5, s=.33, s2=.25;
+    const P=(a,b,z)=>{ const w=s+(s2-s)*z/T; return h.L(a*w,b*w,z); };
+    const leg=(a,b)=>{ const p0=P(a,b,0), p1=P(a,b,T+.2);
+      ctx.fillStyle='#8f8a80'; ctx.beginPath(); ctx.ellipse(p0[0],p0[1],1.7,.85,0,0,7); ctx.fill();
+      ctx.lineCap='butt'; ctx.strokeStyle='#4a3220'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(...p0); ctx.lineTo(...p1); ctx.stroke();
+      ctx.strokeStyle='#86603a'; ctx.lineWidth=.45; ctx.beginPath(); ctx.moveTo(p0[0]-.4,p0[1]); ctx.lineTo(p1[0]-.4,p1[1]); ctx.stroke(); ctx.lineCap='round'; };
+    const X=(a1,b1,a2,b2,za,zb)=>{ ctx.beginPath(); ctx.moveTo(...P(a1,b1,za)); ctx.lineTo(...P(a2,b2,zb)); ctx.moveTo(...P(a1,b1,zb)); ctx.lineTo(...P(a2,b2,za)); ctx.stroke(); };
+    const bar=(a1,b1,a2,b2,z)=>{ ctx.beginPath(); ctx.moveTo(...P(a1,b1,z)); ctx.lineTo(...P(a2,b2,z)); ctx.stroke(); };
+    leg(-1,-1);
+    ctx.strokeStyle='#4f3722'; ctx.lineWidth=.55;
+    for (const [za,zb] of [[.5,2.7],[2.7,4.9]]){ X(-1,-1,1,-1,za,zb); X(-1,-1,-1,1,za,zb); }
+    leg(1,-1); leg(-1,1);
+    ctx.strokeStyle='#5f4128'; ctx.lineWidth=.7;
+    for (const [za,zb] of [[.5,2.7],[2.7,4.9]]){ X(1,-1,1,1,za,zb); X(-1,1,1,1,za,zb); }
+    ctx.lineWidth=.9; for (const z of [.5,2.7]){ bar(1,-1,1,1,z); bar(-1,1,1,1,z); }
+    // cordages aux croisements
+    ctx.fillStyle='#c9b27a'; for (const z of [1.6,3.8]) for (const [a,b] of [[1,0],[0,1]]){ const [x,y]=P(a,b,z); ctx.beginPath(); ctx.arc(x,y,.45,0,7); ctx.fill(); }
+    leg(1,1);
+    hladder(h,.02,.47,.36,0,T+.2);
+    hbox(h,-.4,.4,-.4,.4,T,T+.22,'#7a5532');
+    { const f=FB(h,-.4,.4,.4); planks(f,T,T+.22); }
+    hbox(h,-.25,.25,-.25,.25,T+.22,T+1.95,'#8e6b47',false);
+    for (const f of [FB(h,-.25,.25,.25),FA(h,-.25,.25,.25)]){ planks(f,T+.22,T+1.95); frect(f,.14,.86,T+.85,T+1.55,'#2a1d12'); fline(f,.5,T+.85,.5,T+1.55,'#6b4a2a',.5); fline(f,0,T+.7,1,T+.7,DARKW,.6); }
+    hrail(h,-.4,.4,-.4,.4,T+.22,.45,'#5a3d22');
+    irimoya(h,-.27,.27,-.27,.27,T+1.95,1.6,THA,'#5a3d22',{thatch:true,ov:.12,thick:.3});
+    hbell(h,.33,.33,T+1.75);
+    nobori(h,.46,-.1,0,7.6,'#b4462e','#f3ecdc'); },
+  // 2 · Tour de pierre : talus d'ishigaki, échelle, vigie blanche à colombages, garde-corps, toit de tuiles
+  h => { shadowH(h,-.47,.47,-.47,.47);
+    hbatter(h,-.46,.46,-.46,.46,0,2.5,.11,21);
+    hladder(h,.18,.58,.4,0,2.5);
+    const z=2.5;
+    hbox(h,-.37,.37,-.37,.37,z,z+.16,'#6b4a2a');
+    hbox(h,-.29,.29,-.29,.29,z+.16,z+1.85,PLAST,false);
+    for (const f of [FB(h,-.29,.29,.29),FA(h,-.29,.29,.29)]){
+      frect(f,0,1,z+.16,z+.6,'#3a2a1c'); planks(f,z+.16,z+.6);
+      timber(f,z+.6,z+1.85,3,DARKW,[z+1.7]); lattice(f,.08,.42,z+.85,z+1.5,'#1d1510','#9b7448'); lattice(f,.58,.92,z+.85,z+1.5,'#1d1510','#9b7448'); }
+    hrail(h,-.37,.37,-.37,.37,z+.16,.5,'#4a3220');
+    irimoya(h,-.29,.29,-.29,.29,z+1.85,1.7,TIL,'#ece6da',{ov:.19,crest:'#c9a24a'});
+    hbell(h,.4,.4,z+1.7);
+    nobori(h,.52,-.25,0,6.6,'#b4462e','#f3ecdc'); nobori(h,-.25,.52,0,6.2,'#f3ecdc','#b4462e'); },
+  // 3 · Yagura à étages : talus, rez noir à planches, meurtrières, encorbellement, étage blanc, toits de tuiles, ornements dorés
+  h => { shadowH(h,-.5,.5,-.5,.5);
+    hbatter(h,-.49,.49,-.49,.49,0,2.3,.13,37);
+    const z=2.3, z1=z+2.3, z2=z1+2.0;
+    hbox(h,-.36,.36,-.36,.36,z,z1,PLAST,false);
+    for (const f of [FB(h,-.36,.36,.36),FA(h,-.36,.36,.36)]){
+      frect(f,0,1,z,z+.8,'#2b2622'); for (let k=1;k<10;k++) fline(f,k/10,z,k/10,z+.8,'#47403a',.3); fline(f,0,z+.8,1,z+.8,'#1d1a17',.6);
+      lattice(f,.12,.4,z+1.1,z+1.6,'#1d1a17','#d6d0c3'); lattice(f,.6,.88,z+1.1,z+1.6,'#1d1a17','#d6d0c3');
+      for (const t of [.06,.5,.94]){ const [x,y]=f.F(t,z+.45); poly([x-.55,y+.45,x+.55,y+.45,x,y-.5],'#efe9dd'); }   // meurtrières triangulaires
+    }
+    // ishi-otoshi : encorbellement sur la face avant
+    hbox(h,-.12,.14,.36,.47,z+.25,z+1.3,PLAST,true);
+    { const f=FB(h,-.12,.14,.47); frect(f,0,1,z+.25,z+.55,'#2b2622'); lattice(f,.2,.8,z+.75,z+1.15,'#1d1a17','#d6d0c3'); }
+    pentA(h,-.46,.5,.36,.52,z1,z1-.5,TIL); pentB(h,-.46,.52,.36,.52,z1,z1-.5,TIL);
+    // pignon chidori sur l'auvent
+    h.Q([[-.18,.47,z1-.42],[.18,.47,z1-.42],[0,.39,z1+.35]], shade('#efe9dd',h.kB));
+    ctx.strokeStyle='#2a2f39'; ctx.lineWidth=.7; ctx.beginPath(); ctx.moveTo(...h.L(-.22,.49,z1-.44)); ctx.lineTo(...h.L(0,.39,z1+.4)); ctx.lineTo(...h.L(.22,.49,z1-.44)); ctx.stroke();
+    hbox(h,-.26,.26,-.26,.26,z1,z2,PLAST,false);
+    for (const f of [FB(h,-.26,.26,.26),FA(h,-.26,.26,.26)]){ timber(f,z1,z2,3,'#8a8378',[z2-.15]); lattice(f,.2,.8,z1+.7,z1+1.35,'#1d1a17','#d6d0c3'); }
+    irimoya(h,-.26,.26,-.26,.26,z2,1.6,TIL,'#ece6da',{ov:.16,thick:.3,crest:'#c9a24a'});
+    for (const a of [-.21,.21]){ const [x,y]=h.L(a,0,z2+1.95); ctx.fillStyle='#e0b24a'; ctx.beginPath(); ctx.ellipse(x,y,.75,1.5,0,0,7); ctx.fill(); ctx.fillStyle='#b8862e'; ctx.fillRect(x-.2,y-.4,.4,1.2); }
+    nobori(h,.56,-.3,0,6.4,'#b4462e','#f3ecdc'); }
+];
+function drawWatch(t,b,sx,sy){
+  const lv=lvlOf(b), A=(hash(t.y*3+2,t.x*5+1)<.5)!==((rot&1)===1);
+  blit('T'+lv+(A?1:0), ()=>TOWERS[lv-1](HF(A)), sx, sy);
+  if (b.state!=='ok') badgeAt(sx, sy-[11,10.4,13][lv-1]*HS);
+}
+
+/* --- Remparts : pièces en coordonnées de vue autour du centre de la case --- */
 function wallLinks(t){
   const out=[];
   for (const [dx,dy] of NB){ const n=at(t.x+dx,t.y+dy); if (!n) continue; const j=I(n.x,n.y), nb=bld.get(j);
     if (isWallB(nb) || (nb && nb.type==='tour') || (occ.has(j) && B[bld.get(occ.get(j)).type].mil)){ const [du,dv]=rotD(dx,dy); out.push({du,dv,n}); } }
   return out;
 }
-const WSTONE = ['#b9b3a5','#8c877c','#a09b8f'];
-// Mur de pierres appareillées : assises et joints calés sur la carte, pour que les morceaux voisins se raccordent sans couture
-function stoneWall(u0,u1,v0,v1,z0,z1){
-  vbox(u0,u1,v0,v1,z0,z1,...WSTONE);
-  const n=Math.max(2,Math.round((z1-z0)/.45)), J=.22;
-  ctx.strokeStyle='rgba(50,44,36,.45)'; ctx.lineWidth=.32; ctx.beginPath();
-  for (let k=1;k<n;k++){ const z=z0+(z1-z0)*k/n; ctx.moveTo(...V(u0,v1,z)); ctx.lineTo(...V(u1,v1,z)); ctx.lineTo(...V(u1,v0,z)); }
-  for (let k=0;k<n;k++){ const za=z0+(z1-z0)*k/n, zb=z0+(z1-z0)*(k+1)/n, o=(k%2)*J/2;
-    for (let a=Math.ceil((u0-o)/J)*J+o; a<u1-.02; a+=J) if (a>u0+.02){ ctx.moveTo(...V(a,v1,za)); ctx.lineTo(...V(a,v1,zb)); }
-    for (let a=Math.ceil((v0-o)/J)*J+o; a<v1-.02; a+=J) if (a>v0+.02){ ctx.moveTo(...V(u1,a,za)); ctx.lineTo(...V(u1,a,zb)); } }
-  ctx.stroke();
+const WALL_W = [.08,.17,.13];
+const faceU = (u,v0,v1) => ({F:(t,z)=>V(u,v0+(v1-v0)*t,z), k:.8, len:v1-v0});
+const faceV = (v,u0,u1) => ({F:(t,z)=>V(u0+(u1-u0)*t,v,z), k:.95, len:u1-u0});
+const sbox = (u0,u1,v0,v1,z0,z1,col,top=true) => vbox(u0,u1,v0,v1,z0,z1, top?shade(col,1.06):null, shade(col,.8), shade(col,.95));
+function stoneBlock(u0,u1,v0,v1,z0,z1,seed){
+  stoneCourses((t,z)=>V(u1,v0+(v1-v0)*t,z), v1-v0, z0,z1,.8,seed);
+  stoneCourses((t,z)=>V(u0+(u1-u0)*t,v1,z), u1-u0, z0,z1,.95,seed+9);
+  VQ([[u0,v0,z1],[u1,v0,z1],[u1,v1,z1],[u0,v1,z1]], shade('#b8b2a3',1.05));
+  ctx.strokeStyle='rgba(255,250,235,.3)'; ctx.lineWidth=.35; ctx.beginPath(); ctx.moveTo(...V(u0,v1,z1)); ctx.lineTo(...V(u1,v1,z1)); ctx.lineTo(...V(u1,v0,z1)); ctx.stroke();
+}
+// Petit toit à deux pans ; faîtage selon u (ridgeU) ou selon v
+function gableRoof(ridgeU,u0,u1,v0,v1,zb,r,col,ov,plank,cap=true){
+  const lines = plank ? 'rgba(40,24,12,.35)' : 'rgba(0,0,0,.28)';
+  if (ridgeU){ const vc=(v0+v1)/2, a=v0-ov, b=v1+ov, zr=zb+r;
+    VQ([[u0,a,zb],[u1,a,zb],[u1,vc,zr],[u0,vc,zr]], shade(col,1.15));
+    VQ([[u0,vc,zr],[u1,vc,zr],[u1,b,zb],[u0,b,zb]], shade(col,.95));
+    VQ([[u0,b,zb],[u1,b,zb],[u1,b,zb-.13],[u0,b,zb-.13]], shade(col,.6));
+    if (cap){ VQ([[u1,a,zb],[u1,b,zb],[u1,vc,zr]], shade(col,.72)); VQ([[u1,b,zb],[u1,b,zb-.13],[u1,vc,zr-.13],[u1,vc,zr]], shade(col,.5)); }
+    ctx.strokeStyle=lines; ctx.lineWidth=.3; ctx.beginPath(); for (let u=u0+.04;u<u1;u+=.06){ ctx.moveTo(...V(u,b,zb)); ctx.lineTo(...V(u,vc,zr)); } ctx.stroke();
+    ctx.strokeStyle=plank?'#3b2a1c':'#2a2f39'; ctx.lineWidth=.9; ctx.beginPath(); ctx.moveTo(...V(u0,vc,zr+.06)); ctx.lineTo(...V(u1,vc,zr+.06)); ctx.stroke();
+  } else { const uc=(u0+u1)/2, a=u0-ov, b=u1+ov, zr=zb+r;
+    VQ([[a,v0,zb],[uc,v0,zr],[uc,v1,zr],[a,v1,zb]], shade(col,1.15));
+    VQ([[uc,v0,zr],[b,v0,zb],[b,v1,zb],[uc,v1,zr]], shade(col,.8));
+    VQ([[b,v0,zb],[b,v1,zb],[b,v1,zb-.13],[b,v0,zb-.13]], shade(col,.5));
+    if (cap){ VQ([[a,v1,zb],[b,v1,zb],[uc,v1,zr]], shade(col,.85)); VQ([[a,v1,zb],[a,v1,zb-.13],[b,v1,zb-.13],[b,v1,zb]], shade(col,.6)); }
+    ctx.strokeStyle=lines; ctx.lineWidth=.3; ctx.beginPath(); for (let v=v0+.04;v<v1;v+=.06){ ctx.moveTo(...V(b,v,zb)); ctx.lineTo(...V(uc,v,zr)); } ctx.stroke();
+    ctx.strokeStyle=plank?'#3b2a1c':'#2a2f39'; ctx.lineWidth=.9; ctx.beginPath(); ctx.moveTo(...V(uc,v0,zr+.06)); ctx.lineTo(...V(uc,v1,zr+.06)); ctx.stroke(); }
 }
 function wallPiece(lv,u0,u1,v0,v1,z){
-  if (lv===1){ fence(u0,u1,v0,v1,z,1.7);
-    ctx.fillStyle='#5f4128'; const along=(u1-u0)>(v1-v0), n=Math.max(1,Math.round(Math.max(u1-u0,v1-v0)*7));
-    for (let k=0;k<=n;k++){ const f=k/n, [x,y]= along ? V(u0+(u1-u0)*f,v1,z+1.7) : V(u1,v0+(v1-v0)*f,z+1.7);
-      ctx.beginPath(); ctx.moveTo(x-.5,y); ctx.lineTo(x,y-1.1); ctx.lineTo(x+.5,y); ctx.fill(); } }
-  else if (lv===2) stoneWall(u0,u1,v0,v1,z,z+1.8);
-  else { stoneWall(u0,u1,v0,v1,z,z+.9); plasterWall(u0+.02,u1-.02,v0+.02,v1-.02,z+.9,1.4); }
+  const alongU=(u1-u0)>=(v1-v0)-1e-6, uc=(u0+u1)/2, vc=(v0+v1)/2, len=alongU?u1-u0:v1-v0;
+  const P=(t,zz)=> alongU ? V(u0+(u1-u0)*t, vc, zz) : V(uc, v0+(v1-v0)*t, zz);
+  const F=(t,zz)=> alongU ? V(u0+(u1-u0)*t, v1, zz) : V(u1, v0+(v1-v0)*t, zz);     // face visible
+  const seed = Math.round((u0*7+v0*13)*100)&1023;
+  if (lv===1){                                 // palissade : pieux taillés en pointe, deux lisses, ligatures
+    ctx.strokeStyle='#3e2b1a'; ctx.lineWidth=.5; ctx.beginPath();
+    for (const zz of [.5,1.2]){ ctx.moveTo(...(alongU?V(u0,v0,z+zz):V(u0,v0,z+zz))); ctx.lineTo(...(alongU?V(u1,v0,z+zz):V(u0,v1,z+zz))); } ctx.stroke();
+    const n=Math.max(1,Math.round(len/.07));
+    for (let k=0;k<n;k++){ const t=(k+.5)/n, H=1.5+.3*hash(seed+k*3,k+seed), [x0,y0]=P(t,z), [x1,y1]=P(t,z+H);
+      ctx.lineCap='butt'; ctx.strokeStyle='#5f4128'; ctx.lineWidth=1.15; ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+      ctx.strokeStyle='#8a6440'; ctx.lineWidth=.38; ctx.beginPath(); ctx.moveTo(x0-.25,y0); ctx.lineTo(x1-.25,y1); ctx.stroke(); ctx.lineCap='round';
+      poly([x1-.58,y1+.1, x1,y1-1.15, x1+.58,y1+.1],'#5f4128'); poly([x1-.2,y1-.1, x1,y1-1.1, x1+.35,y1],'#c49a62'); }
+    ctx.strokeStyle='#4a3220'; ctx.lineWidth=.6; ctx.beginPath();
+    for (const zz of [.5,1.2]){ ctx.moveTo(...F(0,z+zz)); ctx.lineTo(...F(1,z+zz)); } ctx.stroke();
+    ctx.fillStyle='#d1b77c'; for (let k=1;k<n;k+=3){ for (const zz of [.5,1.2]){ const [x,y]=F(k/n,z+zz); ctx.fillRect(x-.35,y-.4,.7,.8); } }
+  } else if (lv===2){                          // ishigaki : pierres irrégulières, couvertine
+    stoneBlock(u0,u1,v0,v1,z,z+1.8,seed);
+    sbox(u0,u1,v0,v1,z+1.8,z+1.92,'#9d978a');
+  } else {                                     // mur blanc couvert (dobei) : socle de pierre, enduit, poteaux, plinthe, meurtrières, tuiles
+    stoneBlock(u0,u1,v0,v1,z,z+.8,seed);
+    const i=.018; sbox(u0+i,u1-i,v0+i,v1-i,z+.8,z+2.1,'#f1ece0',false);
+    const f = alongU ? faceV(v1-i,u0+i,u1-i) : faceU(u1-i,v0+i,v1-i), e = alongU ? faceU(u1-i,v0+i,v1-i) : faceV(v1-i,u0+i,u1-i);
+    for (const g of [e,f]){ frect(g,0,1,z+.8,z+1.12,'#3a3530'); fline(g,0,z+1.12,1,z+1.12,'#2a2622',.4); }
+    const n=Math.max(1,Math.round(len/.3));
+    for (let k=0;k<=n;k++) fline(f,k/n,z+1.12,k/n,z+2.1,'#5a4632',.45);
+    for (let k=0;k<n;k++){ const [x,y]=f.F((k+.5)/n,z+1.62); if (k%2) poly([x-.5,y+.45,x+.5,y+.45,x,y-.45],'#2b2622'); else { ctx.fillStyle='#2b2622'; ctx.fillRect(x-.4,y-.4,.8,.8); } }
+    if (Math.abs((u1-u0)-(v1-v0))<.02) vroof(u0-.08,u1+.08,v0-.08,v1+.08,z+2.1,.45,TILE);
+    else gableRoof(alongU,u0,u1,v0,v1,z+2.1,.42,'#4f5a6c',.08,false, (alongU?u1:v1)<.49);   // pas de pignon là où le mur continue
+  }
 }
-function drawWall(t,b){
-  const [u,v]=rotXY(t.x,t.y), z=t.h, lv=lvlOf(b), w = lv===1 ? .07 : lv===2 ? .16 : .12, c=w*1.25;
-  const L = wallLinks(t);
-  const seg = l => { const e = (l.du||l.dv)>0 ? .5 : -.5;
-    if (l.du) wallPiece(lv, Math.min(u+Math.sign(e)*c,u+e), Math.max(u+Math.sign(e)*c,u+e), v-w, v+w, z);
-    else      wallPiece(lv, u-w, u+w, Math.min(v+Math.sign(e)*c,v+e), Math.max(v+Math.sign(e)*c,v+e), z); };
-  if (!L.length){ wallPiece(lv,u-.32,u+.32,v-w,v+w,z); return; }
-  for (const l of L) if (l.du<0||l.dv<0) seg(l);
-  wallPiece(lv,u-c,u+c,v-c,v+c,z);
-  for (const l of L) if (l.du>0||l.dv>0) seg(l);
+function drawWallRel(lv,m){
+  const w=WALL_W[lv-1], c=w*1.25;
+  const L=[]; if (m&1) L.push([1,0]); if (m&2) L.push([-1,0]); if (m&4) L.push([0,1]); if (m&8) L.push([0,-1]);
+  const seg = ([du,dv]) => { const s=du||dv;
+    if (du) wallPiece(lv, s>0?c:-.5, s>0?.5:-c, -w, w, 0); else wallPiece(lv, -w, w, s>0?c:-.5, s>0?.5:-c, 0); };
+  if (!L.length){ wallPiece(lv,-.34,.34,-w,w,0); return; }
+  if (m===3){ wallPiece(lv,-.5,.5,-w,w,0); return; }               // tout droit : une seule pièce continue
+  if (m===12){ wallPiece(lv,-w,w,-.5,.5,0); return; }
+  for (const l of L) if (l[0]<0||l[1]<0) seg(l);
+  wallPiece(lv,-c,c,-c,c,0);
+  for (const l of L) if (l[0]>0||l[1]>0) seg(l);
+}
+const wallMask = t => { let m=0; for (const l of wallLinks(t)) m |= l.du>0?1:l.du<0?2:l.dv>0?4:8; return m; };
+function drawWall(t,b,sx,sy){ const lv=lvlOf(b), m=wallMask(t); blit('W'+lv+'_'+m, ()=>drawWallRel(lv,m), sx, sy); }
+// Porte (yakuimon) : piliers, battants ouverts, linteau, toit à deux pans ; murs du même niveau de part et d'autre
+function drawGateRel(nl,alongU){
+  const gap=.3, w=WALL_W[nl-1];
+  const side = s => alongU ? wallPiece(nl,-w,w, s<0?-.5:gap+.02, s<0?-gap-.02:.5, 0) : wallPiece(nl, s<0?-.5:gap+.02, s<0?-gap-.02:.5, -w,w, 0);
+  const P2 = (o,a,z) => alongU ? V(a,o,z) : V(o,a,z);
+  const pil = (o,a,s,H,col='#4a3220') => alongU ? sbox(a-s,a+s,o-s,o+s,0,H,col) : sbox(o-s,o+s,a-s,a+s,0,H,col);
+  side(-1);
+  pil(-gap,-.24,.04,2.05); pil(gap,-.24,.04,2.05);
+  for (const o of [-gap,gap]){ const d=o<0?1:-1, q=[P2(o+.02*d,-.03,0),P2(o+.07*d,-.29,0),P2(o+.07*d,-.29,2.0),P2(o+.02*d,-.03,2.0)];
+    poly(q.flat(), shade('#7a5532',alongU?.88:.92));
+    ctx.strokeStyle='rgba(40,24,12,.5)'; ctx.lineWidth=.3; ctx.beginPath();
+    for (const f of [.25,.5,.75]){ const z=2*f; ctx.moveTo(...P2(o+.02*d,-.03,z)); ctx.lineTo(...P2(o+.07*d,-.29,z)); } ctx.stroke();
+    ctx.fillStyle='#c9a24a'; for (const z of [.5,1,1.5]) for (const f of [.3,.7]){ const [x,y]=P2(o+(.02+.05*f)*d,-.03-.26*f,z); ctx.beginPath(); ctx.arc(x,y,.25,0,7); ctx.fill(); } }
+  pil(-gap,0,.07,2.55);
+  alongU ? sbox(-.27,.08,-gap-.12,gap+.12,2.2,2.45,'#4a3220') : sbox(-gap-.12,gap+.12,-.27,.08,2.2,2.45,'#4a3220');
+  pil(gap,0,.07,2.55);
+  { const [x,y]=P2(0,.08,1.95); ctx.fillStyle='#2e2116'; ctx.fillRect(x-1,y-.9,2,1.8); ctx.fillStyle='#efe6cf'; ctx.fillRect(x-.6,y-.5,1.2,1); }   // plaque
+  const plank = nl===1, col = plank ? '#7a5a3a' : '#4f5a6c';
+  if (alongU) gableRoof(false,-.33,.14,-gap-.2,gap+.2,2.45,.8,col,.06,plank); else gableRoof(true,-gap-.2,gap+.2,-.33,.14,2.45,.8,col,.06,plank);
+  side(1);
 }
 function drawGate(t,b,sx,sy){
   drawRoad(t,sx,sy);
-  const [u,v]=rotXY(t.x,t.y), z=t.h, L=wallLinks(t), rl=linksOf(t, roadOK(t));
-  const alongU = rl.some(l=>l.du) ? true : rl.some(l=>l.dv) ? false : !L.some(l=>l.du);   // sens de la route
+  const L=wallLinks(t), rl=linksOf(t, roadOK(t));
+  const alongU = rl.some(l=>l.du) ? true : rl.some(l=>l.dv) ? false : !L.some(l=>l.du);
   const nl = Math.max(1, ...L.map(l=>{ const nb=bld.get(I(l.n.x,l.n.y)); return nb && nb.type==='rempart' ? lvlOf(nb) : 1; }));
-  const w = nl===1 ? .07 : .14, gap=.3;
-  const side = s => alongU ? wallPiece(nl, u-w, u+w, s<0?v-.5:v+gap, s<0?v-gap:v+.5, z) : wallPiece(nl, s<0?u-.5:u+gap, s<0?u-gap:u+.5, v-w, v+w, z);
-  const P2 = (o,a,h) => alongU ? [u+a,v+o,z+h] : [u+o,v+a,z+h];
-  const post = o => vbox(...(alongU ? [u-.06,u+.06,v+o-.05,v+o+.05] : [u+o-.05,u+o+.05,v-.06,v+.06]), z, z+2.5, '#4a2f1a','#3a2414','#46301c');
-  side(-1); post(-gap);
-  VQ([P2(-gap-.08,.07,2.25),P2(gap+.08,.07,2.25),P2(gap+.08,.07,2.55),P2(-gap-.08,.07,2.55)], '#3a2414');   // linteau
-  post(gap);
-  const r0 = alongU ? [u-.2,u+.2,v-gap-.16,v+gap+.16] : [u-gap-.16,u+gap+.16,v-.2,v+.2];
-  vroof(...r0, z+2.55, .9, TILE);
-  side(1);
+  blit('G'+nl+(alongU?1:0), ()=>drawGateRel(nl,alongU), sx, sy);
+}
+
+/* --- Armurerie (2×2) : atelier à lanterneau, hangar de forge, cour avec râtelier, armure, charbon et lingots --- */
+function tawara(x,y,s=1){ ctx.fillStyle='#b99a5c'; ctx.beginPath(); ctx.ellipse(x,y,2.3*s,1.45*s,0,0,7); ctx.fill();
+  ctx.strokeStyle='#7d6334'; ctx.lineWidth=.35; ctx.beginPath(); for (const d of [-1,0,1]){ ctx.moveTo(x+d*1.1*s,y-1.35*s); ctx.lineTo(x+d*1.1*s,y+1.35*s); } ctx.stroke();
+  ctx.fillStyle='#d2b77a'; ctx.beginPath(); ctx.ellipse(x+2*s,y,.5*s,1.2*s,0,0,7); ctx.fill(); }
+function yoroi(x,y,s=.85){
+  const S=(a,b)=>[x+a*s,y+b*s];
+  poly([...S(-2.3,0),...S(2.3,0),...S(2.3,-2.2),...S(-2.3,-2.2)],'#3a2a1c');                       // coffre (karabitsu)
+  ctx.fillStyle='#c9a24a'; ctx.fillRect(...S(-.5,-1.4),.9*s,.6*s);
+  poly([...S(-2,-2.2),...S(2,-2.2),...S(1.5,-5.2),...S(-1.5,-5.2)],'#2b2622');                    // tassettes
+  poly([...S(-1.7,-5.2),...S(1.7,-5.2),...S(2,-8.8),...S(-2,-8.8)],'#1f1c18');                    // cuirasse
+  ctx.strokeStyle='#b4462e'; ctx.lineWidth=.35*s; ctx.beginPath();
+  for (const yy of [-2.9,-3.7,-4.5,-6,-6.8,-7.6]){ ctx.moveTo(...S(-1.8,yy)); ctx.lineTo(...S(1.8,yy)); } ctx.stroke();
+  poly([...S(-2,-8.8),...S(-3.4,-8.3),...S(-3.1,-5.6),...S(-1.9,-6)],'#2b2622'); poly([...S(2,-8.8),...S(3.4,-8.3),...S(3.1,-5.6),...S(1.9,-6)],'#24201c');   // épaulières
+  ctx.fillStyle='#1f1c18'; ctx.beginPath(); ctx.ellipse(...S(0,-9.8),1.9*s,1.5*s,0,Math.PI,0); ctx.fill();               // casque
+  poly([...S(-2.6,-9.6),...S(2.6,-9.6),...S(2.2,-8.6),...S(-2.2,-8.6)],'#2b2622');
+  ctx.strokeStyle='#e0b24a'; ctx.lineWidth=.55*s; ctx.beginPath(); ctx.moveTo(...S(-1.6,-12.6)); ctx.quadraticCurveTo(...S(0,-10.4),...S(1.6,-12.6)); ctx.stroke();   // croissant doré
+}
+function drawArmory(u0,u1,v0,v1,z,rt){
+  const A=(hash(rt.y*3+2,rt.x*5+1)<.5)!==((rot&1)===1), h=HFat(A,(u0+u1)/2,(v0+v1)/2,z);
+  // cour de terre battue et dallage de la forge
+  h.Q([[-.95,-.95,0],[.95,-.95,0],[.95,.95,0],[-.95,.95,0]],'#a69a7c');
+  h.Q([[.24,-.95,0],[.95,-.95,0],[.95,.02,0],[.24,.02,0]],'#8f897c');
+  ctx.strokeStyle='rgba(60,54,44,.35)'; ctx.lineWidth=.3; ctx.beginPath();
+  for (let a=.38;a<.95;a+=.14){ ctx.moveTo(...h.L(a,-.95,0)); ctx.lineTo(...h.L(a,.02,0)); } for (let b=-.81;b<.02;b+=.14){ ctx.moveTo(...h.L(.24,b,0)); ctx.lineTo(...h.L(.95,b,0)); } ctx.stroke();
+  for (const [a,b] of [[-.3,.3],[.1,.75],[-.7,.82],[.55,.55]]){ const [x,y]=h.L(a,b,0); ctx.fillStyle='rgba(150,138,108,.8)'; ctx.beginPath(); ctx.ellipse(x,y,1.2,.55,0,0,7); ctx.fill(); }
+  // atelier : socle de pierre, planches sombres, colombages, noren indigo, treillis, toit de tuiles et lanterneau à fumée
+  const wa0=-.88, wa1=.12, wb0=-.88, wb1=.1;
+  shadowH(h,wa0,wa1,wb0,wb1);
+  hbox(h,wa0-.03,wa1+.03,wb0-.03,wb1+.03,0,.32,STONE); stoneFace(FB(h,wa0-.03,wa1+.03,wb1+.03),0,.32); stoneFace(FA(h,wb0-.03,wb1+.03,wa1+.03),0,.32);
+  hbox(h,wa0,wa1,wb0,wb1,.32,2.35,'#5e4630',false);
+  { const f=FB(h,wa0,wa1,wb1); planks(f,.32,2.35); timber(f,.32,2.35,4,'#2e2218',[2.2,.8]);
+    frect(f,.32,.6,.32,1.9,'#2a1a10'); frect(f,.36,.56,.32,.9,'#c0602c');                      // lueur du foyer au fond
+    noren(f,.32,.6,.32,1.95,'#2f4a6b'); { const [x,y]=f.F(.46,1.62); ctx.fillStyle='#efe6cf'; ctx.beginPath(); ctx.arc(x,y,.8,0,7); ctx.fill(); ctx.fillStyle='#2f4a6b'; ctx.beginPath(); ctx.arc(x,y,.4,0,7); ctx.fill(); }
+    lattice(f,.04,.24,1.0,1.85,'#1d1510','#8a6a48'); lattice(f,.7,.94,1.0,1.85,'#1d1510','#8a6a48'); }
+  { const f=FA(h,wb0,wb1,wa1); planks(f,.32,2.35); timber(f,.32,2.35,3,'#2e2218',[2.2,.8]); lattice(f,.1,.42,1.0,1.85,'#1d1510','#8a6a48'); shoji(f,.56,.9,1.0,1.95); }
+  pentB(h,wa0-.02,wa1+.02,wb1,wb1+.16,2.05,1.7,TIL);
+  irimoya(h,wa0,wa1,wb0,wb1,2.35,1.9,TIL,'#ece6da',{ov:.15});
+  { const am=(wa0+wa1)/2, bm=(wb0+wb1)/2, zr=2.35+1.9;
+    hbox(h,am-.2,am+.2,bm-.09,bm+.09,zr-.2,zr+.32,'#2a1d12',false);
+    kiri(h,am-.22,am+.22,bm-.12,bm+.12,zr+.32,.35,TIL,'#2a1d12',{ov:.05,thick:.14});
+    const [x,y]=h.L(am,bm,zr+.9); hsmoke(x,y-1,1.1); }
+  // hangar de forge : poteaux, foyer de pierre, soufflet, cheminée, enclume sur billot, bac de trempe, toit de planches lesté
+  const sa0=.32, sa1=.9, sb0=-.88, sb1=-.12;
+  const post=(a,b)=>{ ctx.lineCap='butt'; ctx.strokeStyle=shade(DARKW,h.kA); ctx.lineWidth=1.1; ctx.beginPath(); ctx.moveTo(...h.L(a,b,0)); ctx.lineTo(...h.L(a,b,1.95)); ctx.stroke(); ctx.lineCap='round'; };
+  post(sa0,sb0); post(sa1,sb0); post(sa0,sb1);
+  hbox(h,.3,.42,-.82,-.5,0,.62,'#6b4a2a'); { const f=FB(h,.3,.42,-.5); planks(f,0,.62); } { const [x0,y0]=h.L(.36,-.5,.62), [x1,y1]=h.L(.36,-.28,.9); ctx.strokeStyle='#4a3220'; ctx.lineWidth=.45; ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke(); }
+  hbox(h,.44,.82,-.84,-.48,0,.72,STONE); stoneFace(FB(h,.44,.82,-.48),0,.72); stoneFace(FA(h,-.84,-.48,.82),0,.72);
+  { const f=FB(h,.44,.82,-.48); frect(f,.28,.72,.12,.5,'#3a1a0c'); frect(f,.33,.67,.14,.4,'#f08a3a'); }
+  h.Q([[.5,-.8,.72],[.76,-.8,.72],[.76,-.54,.72],[.5,-.54,.72]],'#2a1a10'); h.Q([[.56,-.74,.73],[.7,-.74,.73],[.7,-.6,.73],[.56,-.6,.73]],'#f2a03c');
+  { const [x,y]=h.L(.63,-.48,.4); const g=ctx.createRadialGradient(x,y,0,x,y,7); g.addColorStop(0,'rgba(255,160,70,.45)'); g.addColorStop(1,'rgba(255,160,70,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,7,0,7); ctx.fill(); }
+  const chim = (z0,z1) => { hbox(h,.6,.76,-.82,-.66,z0,z1,'#8a5a40'); for (const f of [FB(h,.6,.76,-.66),FA(h,-.82,-.66,.76)]) for (let zz=z0+.25; zz<z1; zz+=.25) fline(f,0,zz,1,zz,'#5a3a28',.25); };
+  chim(.72,2.9);
+  hbox(h,.6,.72,-.33,-.21,0,.42,'#5a3d22'); hbox(h,.55,.78,-.3,-.24,.42,.6,'#4c525a'); { const [x,y]=h.L(.78,-.27,.56); poly([x,y-.4, x+1.2,y+.1, x,y+.4],'#4c525a'); }
+  { const [x,y]=h.L(.72,-.2,.6); ctx.strokeStyle='#3a2a1c'; ctx.lineWidth=.45; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+1.6,y-1.6); ctx.stroke(); ctx.fillStyle='#6d737b'; ctx.fillRect(x+1.2,y-2.2,1.2,.8); }
+  hbox(h,.32,.52,-.4,-.16,0,.36,'#6b4a2a'); h.Q([[.34,-.38,.36],[.5,-.38,.36],[.5,-.18,.36],[.34,-.18,.36]],'#4f8fa0');
+  post(sa1,sb1);
+  kiri(h,sa0,sa1,sb0,sb1,1.95,1.05,PLK,'#5e4630',{kind:'plank',stones:true,ov:.09,thick:.22});
+  chim(2.5,3.45); h.Q([[.58,-.84,3.45],[.78,-.84,3.45],[.78,-.64,3.45],[.58,-.64,3.45]],'#3a2a1c');
+  { const [x,y]=h.L(.68,-.74,3.6); hsmoke(x,y-1,1.3); }
+  // râtelier d'armes : yari et naginata
+  const ra0=-.86, ra1=-.18, rb=.5, R=(a,zz)=>h.L(a,rb,zz);
+  ctx.strokeStyle=shade(DARKW,h.kB); ctx.lineWidth=.9; ctx.beginPath();
+  for (const a of [ra0,ra1]){ ctx.moveTo(...R(a,0)); ctx.lineTo(...R(a,1.75)); } ctx.stroke();
+  ctx.lineWidth=.6; ctx.beginPath(); for (const zz of [.5,1.6]){ ctx.moveTo(...R(ra0-.03,zz)); ctx.lineTo(...R(ra1+.03,zz)); } ctx.stroke();
+  for (let k=0;k<7;k++){ const a=ra0+.06+k*(ra1-ra0-.12)/6, [x0,y0]=R(a+.03,.08), [x1,y1]=R(a,2.25);
+    ctx.strokeStyle=k%3===1?'#2e2116':'#6b4a2a'; ctx.lineWidth=.45; ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+    ctx.strokeStyle='#d8dce2'; ctx.lineWidth=.75; ctx.beginPath();
+    if (k%3===1){ ctx.moveTo(x1,y1); ctx.quadraticCurveTo(x1+.1,y1-1.4,x1+.8,y1-2.1); } else { ctx.moveTo(x1,y1); ctx.lineTo(x1,y1-1.7); }
+    ctx.stroke(); }
+  // charbon, armure exposée, lingots, tonneau, bannière
+  { const [x,y]=h.L(.62,.28,0); tawara(x-1.5,y+.6); tawara(x+2.2,y+1.3); tawara(x+.3,y-1.4,.95); }
+  { const [x,y]=h.L(.12,.58,0); yoroi(x,y); }
+  for (let r=0;r<3;r++) for (let q=0;q<3-r;q++){ const a=.6+q*.09+r*.045, b=.66; hbox(h,a,a+.07,b,b+.16,r*.12,r*.12+.12,'#6d737b'); }
+  barrel(h,.88,.2);
+  nobori(h,-.93,.93,0,5.6,'#2b2622','#efe6cf');
 }
 function drawBuilding(b,t,sx,sy){
   switch(b.type){
-    case 'tour': drawWatch(t,b); return;
-    case 'rempart': drawWall(t,b); return;
+    case 'tour': drawWatch(t,b,sx,sy); return;
+    case 'rempart': drawWall(t,b,sx,sy); return;
     case 'porte': drawGate(t,b,sx,sy); return;
     case 'chemin': drawRoad(t,sx,sy); break;
     case 'pont': drawBridge(t,sx,sy); break;
@@ -1394,7 +1635,7 @@ function drawBig(root, b){
   // socle de pierre qui rattrape le dénivelé de toute l'emprise
   vbox(u0+.02,u1-.02,v0+.02,v1-.02,lo,hi+.3,'#b9b4a8','#8d887d','#a19c91');
   const z = hi+.3;
-  const drawIt = () => drawCompo(b.type, rt.x, rt.y, z);
+  const drawIt = () => b.type==='armurerie' ? drawArmory(u0,u1,v0,v1,z,rt) : drawCompo(b.type, rt.x, rt.y, z);
   const Htot = BIG_H[b.type];
   if (b.build){
     const p = siteProgress(b), [, yb] = V(u1,v1,z), [, yt] = V((u0+u1)/2,(v0+v1)/2,z+Htot);
@@ -1483,15 +1724,6 @@ function turret(u0,u1,v0,v1,z){ vbatter(u0,u1,v0,v1,z,z+1,.12,'#bdb7a8','#8f8a7f
 
 // [type, x0, x1, y0, y1, options] en coordonnées de l'emprise (0..w, 0..h) ; 'g' = au sol (dessiné d'abord, dans l'ordre)
 const COMPO = {
-  armurerie: [
-    ['g','quad',0.08,1.92,0.08,1.92,'#a79f8a'],
-    ['g','quad',1.3,1.92,0.9,1.4,'#6f6658'],
-    ['o','hall',0.2,1.2,0.22,1.78,{base:.25,wall:1.6,rise:1.5,pil:'#2e2218',wallR:'#7a6852',wallL:'#8a785f',door:true}],
-    ['o','forge',1.35,1.8,0.25,0.7],
-    ['o','anvil',1.45,1.65,1.05,1.25],
-    ['o','rack',1.4,1.85,1.55,1.75],
-    ['o','banner',1.82,1.9,1.82,1.9,'#2b2622'],
-  ],
   garde: [
     ['g','quad',0.1,2.9,0.1,2.9,'#a99b74'],
     ['g','quad',1.2,1.8,1.6,2.9,'#c4b48a'],
@@ -2401,7 +2633,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
 });
-const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 7'; }).observe(vl,{childList:true}), vl.textContent += ' · version 7';
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 8'; }).observe(vl,{childList:true}), vl.textContent += ' · version 8';
 </script>
 </body>
 </html>

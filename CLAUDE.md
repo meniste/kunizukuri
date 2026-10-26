@@ -13,7 +13,7 @@ Page de travail sur claude.ai : https://claude.ai/artifact/CLhV2JWH68gFYdVze4YpM
 2. Incrémenter le numéro partout : `VERSION` dans `sw.js` **et** le libellé `· version N` dans `index.html` (script en bas de page, visible dans le menu 国).
 3. Commit sur `main` (GitHub Pages publie `main` / racine). Le téléphone récupère la version à la prochaine ouverture avec réseau et se recharge seul.
 4. Republier aussi la page claude.ai (sans le bloc service worker / manifest).
-Version actuelle : **7**.
+Version actuelle : **8**.
 
 ## État du jeu
 - Carte procédurale 96×96 (graine), relief jusqu'à 50 niveaux, rivières qui suivent le courant, mer en bordure, 5 essences de forêt, 18 filons dans des parois de montagne (mines en façade).
@@ -24,6 +24,7 @@ Version actuelle : **7**.
 - Territoire : terres de départ + cercles des postes armés en service ; rayon +1 par 6 points de rempart à portée (palissade 1, ishigaki 2, mur couvert 3, porte 2 ; plafond +3 tour, +4 garde, +6 château).
 - Enceinte : cases inaccessibles depuis le bord de carte sans franchir rempart ou rivière (douves) → +1 place par maison, +1 米 par rizière.
 - Maisons (6 modèles), forêts et camp de bûcherons dessinés une fois puis recopiés (cache de sprites) pour les performances.
+- Bâtiments militaires dessinés avec les mêmes outils que les maisons (repère local `HF`, `hbox`, `planks`, `lattice`, `irimoya`…) : tours `TOWERS[0..2]` et remparts/portes en sprites (`blit`, clés `T`, `W<niveau>_<masque>`, `G`), armurerie `drawArmory` (repère `HFat`, dessinée à chaque image). Pierres d'ishigaki : `stoneCourses`.
 - Sauvegarde : `localStorage` clé `kunizukuri5`.
 
 ## Pistes suivantes évoquées
