@@ -439,8 +439,8 @@ function advanceSite(i,b,now){
   if (p>=1){ delete b.build; toast(`${d.name} achevé !`); floaters.push({x:sx,y:sy-30,txt:`${d.k} achevé`,c:'#fff8e8',t0:now}); }
   else if (moved) floaters.push({x:sx,y:sy-26,txt:`${Math.round(p*100)} %`,c:'#fff8e8',t0:now});
 }
-function clearZone(t){ const out=[]; for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){ const n=at(t.x+dx,t.y+dy); if (!n) continue; const j=I(n.x,n.y);
-  if (n.forest && seen[j] && terr[j] && !bld.has(j) && !occ.has(j)) out.push(n); } return out; }
+function clearZone(t){ const j=I(t.x,t.y);
+  return (t.forest && seen[j] && terr[j] && !bld.has(j) && !occ.has(j)) ? [t] : []; }
 function canCanal(t){
   const i=I(t.x,t.y);
   if (!seen[i]) return {ok:false,why:'Terre inconnue.'};
@@ -1896,7 +1896,7 @@ function renderRes(){
   $('res').innerHTML = chips.map(([k,v])=>`<div class="chip${k==='riz'&&rizRate<0?' warn':''}" title="${RES[k].name}${k==='riz'?` (${rizRate>=0?'+':''}${rizRate.toFixed(1)} par jour)`:''}"><b style="background:${RES[k].color}">${RES[k].k}</b>${v}</div>`).join('');
 }
 const TOOL_LIST = ['riziere','maison','bucheron','defricher','canal','explorer','chemin','pont','mine','ameliorer','temple','garde','chateau','demolir'];
-const DEFRICHER = { k:'伐', name:'Défricher', era:1, cost:null, hint:'Rase la forêt sur 3×3 cases · +3 木 par case' };
+const DEFRICHER = { k:'伐', name:'Défricher', era:1, cost:null, hint:'Rase la forêt case par case · +3 木 par case' };
 const CANAL = { k:'渠', name:'Canal', era:1, cost:{bois:3}, hint:'Prolonge une rivière ou un canal d’une case' };
 const toolDef = id => id==='ameliorer' ? {k:'改',name:'Améliorer',cost:B.machiya.cost,era:2}
   : id==='demolir' ? {k:'壊',name:'Démolir',cost:null,era:1} : id==='explorer' ? EXPLORER : id==='defricher' ? DEFRICHER : id==='canal' ? CANAL : B[id];
@@ -1905,7 +1905,7 @@ function buildTools(){
   const items = TOOL_LIST.filter(id=>era>=toolDef(id).era);
   const next = era<2 ? `À ${ERA2_POP} habitants : chemins, ponts, mines.` : era<3 ? `À ${ERA3_POP} habitants : temple, poste de garde, château.` : 'Bientôt : forge, santé, remparts.';
   $('tools').innerHTML = items.map(id=>{ const d=toolDef(id);
-    const c = id==='ameliorer' ? 'maison, mine, chemin' : id==='defricher' ? '3×3 · +木' : d.w ? `${d.w}×${d.h} · chantier ${d.days} j` : d.cost ? costTxt(d.cost) : '';
+    const c = id==='ameliorer' ? 'maison, mine, chemin' : id==='defricher' ? '1 case · +3 木' : d.w ? `${d.w}×${d.h} · chantier ${d.days} j` : d.cost ? costTxt(d.cost) : '';
     return `<button class="tool" data-tool="${id}" aria-pressed="${tool===id}" type="button" title="${d.hint||''}"><span class="k">${d.k}</span><span class="l">${d.name}</span><span class="c">${c}</span></button>`;
   }).join('') + `<div class="next">${next}</div>`;
   $('tools').querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>{ setTool(b.dataset.tool); setPalette(false); }));
@@ -2194,7 +2194,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
 });
-const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 5'; }).observe(vl,{childList:true}), vl.textContent += ' · version 5';
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 6'; }).observe(vl,{childList:true}), vl.textContent += ' · version 6';
 </script>
 </body>
 </html>

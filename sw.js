@@ -1,6 +1,6 @@
 // Kunizukuri : service worker pour jouer hors réseau.
 // Changez VERSION à chaque mise à jour du jeu pour que les appareils récupèrent la nouvelle version.
-const VERSION = 'kunizukuri-v5';
+const VERSION = 'kunizukuri-v6';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
