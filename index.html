@@ -749,25 +749,45 @@ function linksOf(t, ok){
     const [du,dv] = rotD(dx,dy); out.push({du,dv,n,dh:t.h-n.h}); }
   return out;
 }
-// Trace en plan. Les extrémités arrivent perpendiculairement au bord de la parcelle et le dépassent légèrement
-// (quand la voisine est au même niveau) : le tracé voisin reprend exactement au même endroit, sans raccord visible.
+// Tracé en plan d'une parcelle (repère −0.5…0.5). Chaque extrémité arrive au milieu d'un bord, perpendiculairement :
+// tout droit = segment, virage = quart de cercle centré sur le coin de la parcelle (rayon 0.5, jamais replié sur
+// lui-même même pour une rivière large), carrefour et impasse = branches vers le centre. Le dessin est découpé au
+// bord de la parcelle, si bien que la parcelle voisine reprend exactement là où celle-ci s'arrête.
+function pathShape(L){
+  if (L.length===2){
+    const [p,q]=L;
+    if (p.du===-q.du && p.dv===-q.dv) return {kind:'line', a:[p.du*.5,p.dv*.5], b:[q.du*.5,q.dv*.5]};
+    const cx=(p.du+q.du)*.5, cy=(p.dv+q.dv)*.5, a1=Math.atan2(p.dv*.5-cy,p.du*.5-cx), a2=Math.atan2(q.dv*.5-cy,q.du*.5-cx);
+    let d=a2-a1; while (d>Math.PI) d-=2*Math.PI; while (d<-Math.PI) d+=2*Math.PI;
+    return {kind:'arc', cx, cy, a1, d};
+  }
+  return {kind:'spokes'};
+}
 function planPath(L){
   ctx.beginPath();
-  const ends = l => { const k = l.dh===0 ? .56 : .5; return [l.du*k, l.dv*k, l.du*.5, l.dv*.5]; };
-  if (L.length===2){
-    const [ax,ay,amx,amy] = ends(L[0]), [bx,by,bmx,bmy] = ends(L[1]);
-    ctx.moveTo(ax,ay); ctx.lineTo(amx,amy);
-    if (amx===-bmx && amy===-bmy) ctx.lineTo(bmx,bmy); else ctx.quadraticCurveTo(0,0,bmx,bmy);
-    ctx.lineTo(bx,by);
-  } else for (const l of L){ const [x,y] = ends(l); ctx.moveTo(x,y); ctx.lineTo(0,0); }
+  const S = pathShape(L);
+  const X = .54;   // petit prolongement sous la parcelle voisine : cache la fine ligne du bord des dalles
+  if (S.kind==='line'){ const [p,q]=L; ctx.moveTo(p.du*X,p.dv*X); ctx.lineTo(q.du*X,q.dv*X); }
+  else if (S.kind==='arc'){ const [p,q]=L; ctx.moveTo(p.du*X,p.dv*X); ctx.arc(S.cx,S.cy,.5,S.a1,S.a1+S.d,S.d<0); ctx.lineTo(q.du*X,q.dv*X); }
+  else for (const l of L){ ctx.moveTo(l.du*X,l.dv*X); ctx.lineTo(0,0); }
 }
-// Passes de couleur superposées ; bouts droits aux bords, rond au centre pour les carrefours et les impasses.
+// Points régulièrement espacés le long de l'axe du tracé, avec leur direction (pour pavés, dalles, cailloux)
+function pathSamples(L, step){
+  const S = pathShape(L), out=[];
+  if (S.kind==='line'){ const n=Math.round(1/step); for (let k=0;k<n;k++){ const f=(k+.5)/n; out.push({x:S.a[0]+(S.b[0]-S.a[0])*f, y:S.a[1]+(S.b[1]-S.a[1])*f, ang:Math.atan2(S.b[1]-S.a[1],S.b[0]-S.a[0])}); } }
+  else if (S.kind==='arc'){ const len=Math.abs(S.d)*.5, n=Math.max(2,Math.round(len/step)); for (let k=0;k<n;k++){ const an=S.a1+S.d*(k+.5)/n; out.push({x:S.cx+.5*Math.cos(an), y:S.cy+.5*Math.sin(an), ang:an+Math.PI/2}); } }
+  else for (const l of L){ const n=Math.round(.5/step); for (let k=0;k<n;k++){ const f=(k+.5)/n*.5; out.push({x:l.du*f, y:l.dv*f, ang:Math.atan2(l.dv,l.du)}); } }
+  return out;
+}
+// Passes de couleur superposées, découpées au bord de la parcelle ; rond au centre pour les carrefours et les impasses.
 function strokes(passes, L){
+  ctx.save(); ctx.beginPath(); ctx.rect(-.54,-.54,1.08,1.08); ctx.clip();
   ctx.lineCap='butt'; ctx.lineJoin='round';
   for (const [w,c] of passes){
-    ctx.lineWidth=w; ctx.strokeStyle=c; if (L.length) ctx.stroke();
-    if (L.length!==2){ ctx.save(); ctx.fillStyle=c; ctx.beginPath(); ctx.arc(0,0,w/2,0,7); ctx.fill(); ctx.restore(); planPath(L); }
+    planPath(L); ctx.lineWidth=w; ctx.strokeStyle=c; if (L.length) ctx.stroke();
+    if (L.length!==2){ ctx.fillStyle=c; ctx.beginPath(); ctx.arc(0,0,w/2,0,7); ctx.fill(); }
   }
+  ctx.restore();
 }
 // Bande verticale sur la face avant d'une parcelle (cascade, escalier), vers le voisin (du,dv) situé devant.
 function faceBand(sx,sy,du,dv,g,fn){
@@ -778,7 +798,6 @@ function river(t,sx,sy){
   const ti = I(t.x,t.y);
   const L = linksOf(t, n=>{ const ni=I(n.x,n.y); return t.down===ni || n.down===ti || t.src===ni || n.src===ti; });
   planeBegin(sx,sy);
-  planPath(L);
   strokes([[.66,'#7d7150'],[.5,'#3f7c8c'],[.32,'#5c9fae'],[.12,'#8cc6d2']], L);
   // écume au pied d'une cascade venant de l'arrière
   for (const l of L) if ((l.du<0||l.dv<0) && l.dh<0 && !l.n.water){
@@ -806,20 +825,21 @@ function drawRoad(t,sx,sy){
   const lv = lvlOf(bld.get(I(t.x,t.y)));
   const L = linksOf(t, roadOK(t));
   planeBegin(sx,sy);
-  planPath(L);
   strokes(ROAD_PAL[lv-1], L);
+  // détails qui suivent l'axe, y compris dans les virages
+  ctx.save(); ctx.beginPath(); ctx.rect(-.5,-.5,1,1); ctx.clip();
   if (lv===1){
     ctx.fillStyle='rgba(90,72,46,.5)';
-    for (let k=0;k<3;k++){ const a=hash(t.x*5+k,t.y)-.5, b=hash(t.x,t.y*5+k)-.5; ctx.beginPath(); ctx.arc(a*.5,b*.5,.018,0,7); ctx.fill(); }
+    pathSamples(L,.22).forEach((p,k)=>{ const o=(hash(t.x*5+k,t.y)-.5)*.3; ctx.beginPath(); ctx.arc(p.x-Math.sin(p.ang)*o,p.y+Math.cos(p.ang)*o,.018,0,7); ctx.fill(); });
   } else if (lv===2){            // dalles de pierre irrégulières le long du tracé
     ctx.strokeStyle='rgba(70,66,58,.4)'; ctx.lineWidth=.012;
-    for (const l of L) for (let e=.08,k=0;e<.55;e+=.12,k++){ const j=(hash(t.x*3+k,t.y*7+l.du)-.5)*.06;
-      const cx=l.du*e+l.dv*j, cy=l.dv*e+l.du*j; ctx.beginPath(); ctx.ellipse(cx,cy,.11,.07,l.du?0:Math.PI/2,0,7); ctx.stroke(); }
-  } else {                       // pavés : joints réguliers
-    for (const l of L){ ctx.strokeStyle='rgba(70,66,58,.35)'; ctx.lineWidth=.012; ctx.beginPath();
-      for (let e=.06;e<.55;e+=.09){ const [px,py]=[l.du*e,l.dv*e], [qx,qy]=[l.dv*.24,l.du*.24]; ctx.moveTo(px-qx,py-qy); ctx.lineTo(px+qx,py+qy); }
-      ctx.stroke(); }
+    pathSamples(L,.12).forEach((p,k)=>{ const j=(hash(t.x*3+k,t.y*7)-.5)*.06; ctx.beginPath(); ctx.ellipse(p.x-Math.sin(p.ang)*j,p.y+Math.cos(p.ang)*j,.07,.11,p.ang+Math.PI/2,0,7); ctx.stroke(); });
+  } else {                       // pavés : joints réguliers, perpendiculaires à l'axe
+    ctx.strokeStyle='rgba(70,66,58,.35)'; ctx.lineWidth=.012; ctx.beginPath();
+    for (const p of pathSamples(L,.09)){ const qx=-Math.sin(p.ang)*.24, qy=Math.cos(p.ang)*.24; ctx.moveTo(p.x-qx,p.y-qy); ctx.lineTo(p.x+qx,p.y+qy); }
+    ctx.stroke();
   }
+  ctx.restore();
   ctx.restore();
 }
 // Raccord de niveau : dessiné sur la dalle basse, contre la face de la dalle haute située derrière.
