@@ -189,11 +189,21 @@ const RES = {
   riz:    { k:'米', name:'Riz',       color:'#f4eedb' },
   bois:   { k:'木', name:'Bois',      color:'#c0915a' },
   pierre: { k:'石', name:'Pierre',    color:'#aaa69c' },
-  tetsu:  { k:'鉄', name:'Fer',       color:'#8d9aa6' },
+  tetsu:  { k:'鉄', name:'Minerai de fer', color:'#8d9aa6' },
   dou:    { k:'銅', name:'Cuivre',    color:'#c6743f' },
   kin:    { k:'金', name:'Or',        color:'#e4b440' },
-  armes:  { k:'刀', name:'Armes',     color:'#d3d6db' }
+  hagane: { k:'鋼', name:'Acier',     color:'#b9c3cc' },
+  yari:   { k:'槍', name:'Lances',    color:'#d9c39a' },
+  armes:  { k:'刀', name:'Sabres',    color:'#d3d6db' },
+  yoroi:  { k:'鎧', name:'Armures',   color:'#c96a4a' }
 };
+// Équipement des soldats, du plus simple au meilleur : chaque niveau de tour exige le suivant
+const EQUIP = [
+  { key:'yari',  k:'槍', name:'Lance',  cost:{hagane:1,bois:1} },
+  { key:'armes', k:'刀', name:'Sabre',  cost:{hagane:2} },
+  { key:'yoroi', k:'鎧', name:'Armure', cost:{hagane:2,dou:1}, lvl:2 }
+];
+const SOLDIER_CAP = { garde:8, chateau:30 };          // soldats logés par chaque poste de garde / le château
 const ORES = { tetsu:{rate:3}, dou:{rate:2}, kin:{rate:.8} };
 const EAT = .6;                                    // riz par habitant et par jour
 const B = {
@@ -204,13 +214,14 @@ const B = {
   pont:     { k:'橋', name:'Pont en bois',     era:2, cost:{bois:6},                           hint:'Touchez une rive puis l’autre : le pont enjambe toute l’eau entre les deux' },
   mine:     { k:'鉱', name:'Mine',             era:2, cost:{bois:15}, workers:3, prod:{pierre:4}, hint:'Dans une paroi marquée de filons, reliée par chemin' },
   machiya:  { k:'町', name:'Maison améliorée', era:2, cost:{bois:20,riz:15}, cap:8,            hint:'Remplace une maison, loge 8' },
-  armurerie:{ k:'鍛', name:'Armurerie',        era:2, cost:{bois:40,pierre:30}, workers:3, crew:3, days:3, w:2, h:2, road:true, hint:'2×2 cases · forge 1 刀 par jour avec 2 鉄 et 1 木 · reliée par un chemin' },
-  tour:     { k:'櫓', name:'Tour de guet',     era:2, cost:{bois:20}, mil:true, road:true, hint:'Découvre la carte sur 11 cases dès sa construction · armée de 2 soldats et reliée par un chemin, étend vos terres sur 6 cases' },
+  forge:    { k:'炉', name:'Forge',            era:2, cost:{bois:25,pierre:20}, workers:3, road:true, hint:'Fond le minerai : 2 鉄 + 2 木 → 1 鋼 (acier) par jour · reliée par un chemin' },
+  armurerie:{ k:'武', name:'Armurerie',        era:2, cost:{bois:40,pierre:30}, workers:3, crew:3, days:3, w:2, h:2, road:true, hint:'2×2 cases · forge lances 槍, sabres 刀 et armures 鎧 avec l’acier 鋼 · reliée par un chemin' },
+  tour:     { k:'櫓', name:'Tour de guet',     era:2, cost:{bois:20}, mil:true, road:true, hint:'Découvre la carte sur 11 cases dès sa construction · avec 2 soldats armés de lances 槍 venus d’un poste de garde, et reliée par un chemin, étend vos terres sur 6 cases' },
   rempart:  { k:'塁', name:'Rempart',          era:2, cost:{bois:3}, hint:'Case par case · renforce les postes proches · une enceinte fermée protège ce qu’elle entoure' },
   porte:    { k:'門', name:'Porte',            era:2, cost:{bois:10,pierre:4}, hint:'Rempart posé sur un chemin : on passe' },
   temple:   { k:'寺', name:'Temple',          era:3, cost:{bois:260,pierre:180}, workers:4, crew:6, days:8, w:5, h:7, hint:'5×7 cases · +2 places dans les maisons à 10 cases' },
-  garde:    { k:'番', name:'Poste de garde',  era:3, cost:{bois:60,pierre:40,tetsu:10}, workers:5, crew:4, days:4, w:3, h:3, guard:9, mil:true, road:true, hint:'3×3 cases · 5 gardes armés protègent les terres sur 9 cases · relié par un chemin' },
-  chateau:  { k:'城', name:'Château',         era:3, cost:{bois:600,pierre:1500,tetsu:200,kin:40}, workers:16, crew:16, days:16, w:9, h:9, guard:24, mil:true, unique:true, hint:'9×9 cases avec douves et jardin · sa garnison armée protège les terres sur 24 cases' }
+  garde:    { k:'番', name:'Poste de garde',  era:2, cost:{bois:60,pierre:40,tetsu:10}, workers:3, crew:4, days:4, w:3, h:3, guard:9, mil:true, road:true, hint:'3×3 cases · caserne : loge 8 soldats pour les tours de guet · 3 gardes armés de lances protègent 9 cases · relié par un chemin' },
+  chateau:  { k:'城', name:'Château',         era:3, cost:{bois:600,pierre:1500,tetsu:200,kin:40}, workers:16, crew:16, days:16, w:9, h:9, guard:24, mil:true, unique:true, hint:'9×9 cases avec douves et jardin · loge 30 soldats · sa garnison de 16 sabres protège les terres sur 24 cases' }
 };
 const MINE_LV = [
   { name:'Galerie',             workers:3, mult:1 },
@@ -235,13 +246,19 @@ const WALL_LV = [
   { name:'Mur blanc couvert', k:'塀', pts:3, cost:{pierre:2,bois:3} }
 ];
 const ARM_LV = [
-  { name:'Armurerie',   workers:3, out:1 },
-  { name:'Grande forge', workers:5, out:2, cost:{pierre:40,tetsu:20} }
+  { name:'Armurerie',            workers:3, out:1 },
+  { name:'Atelier d’armurier',   workers:5, out:2, cost:{pierre:40,hagane:15} }
 ];
+const FORGE_LV = [
+  { name:'Forge',                workers:3, out:1 },
+  { name:'Haut fourneau tatara', workers:5, out:2, cost:{pierre:35,bois:20,tetsu:10} }
+];
+// Équipement exigé : tour = son niveau (槍, 刀, 鎧), poste de garde = 槍, château = 刀
+const tierOf = b => b.type==='tour' ? lvlOf(b) : b.type==='chateau' ? 2 : 1;
 const WALL_PER_STEP = 6;                           // points de rempart pour +1 case de zone
 const lvlOf = b => b.lvl||1;
 const workersOf = b => b.build ? B[b.type].crew : b.type==='mine' ? MINE_LV[lvlOf(b)-1].workers
-  : b.type==='tour' ? TOUR_LV[lvlOf(b)-1].soldiers : b.type==='armurerie' ? ARM_LV[lvlOf(b)-1].workers : (B[b.type].workers||0);
+  : b.type==='tour' ? TOUR_LV[lvlOf(b)-1].soldiers : b.type==='armurerie' ? ARM_LV[lvlOf(b)-1].workers : b.type==='forge' ? FORGE_LV[lvlOf(b)-1].workers : (B[b.type].workers||0);
 const multOf = b => b.type==='mine' ? MINE_LV[lvlOf(b)-1].mult : 1;
 const TERRAIN = {
   mer:      { k:'海', name:'Mer',            top:'#4a7b86', side:'#335c66' },
@@ -425,7 +442,7 @@ function unpackSeen(str){ const a=new Uint8Array(N*N); let i=0, cur=0; for (cons
 function save(){
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({ seed, res, pop, era, day, rot, paused, speed,
-      b:[...bld].map(([i,b])=>[i,b.type,lvlOf(b),b.build?b.build.got:0,b.arms||0]), cleared: tiles.filter(t=>t.cleared).map(t=>I(t.x,t.y)), canals: tiles.filter(t=>t.canal).map(t=>[I(t.x,t.y),t.src,t.h,t.h0]),
+      b:[...bld].map(([i,b])=>[i,b.type,lvlOf(b),b.build?b.build.got:0,b.arms||0,b.mode||0]), cleared: tiles.filter(t=>t.cleared).map(t=>I(t.x,t.y)), canals: tiles.filter(t=>t.canal).map(t=>[I(t.x,t.y),t.src,t.h,t.h0]),
       seen: packSeen() }));
   } catch(e){}
 }
@@ -527,6 +544,7 @@ function upCost(b){
   if (b.type==='tour' && lvlOf(b)<TOUR_LV.length) return TOUR_LV[lvlOf(b)].cost;
   if (b.type==='rempart' && lvlOf(b)<WALL_LV.length) return WALL_LV[lvlOf(b)].cost;
   if (b.type==='armurerie' && !b.build && lvlOf(b)<ARM_LV.length) return ARM_LV[lvlOf(b)].cost;
+  if (b.type==='forge' && lvlOf(b)<FORGE_LV.length) return FORGE_LV[lvlOf(b)].cost;
   return null;
 }
 function canBuild(tl,t){
@@ -545,7 +563,9 @@ function canBuild(tl,t){
   if (tl==='ameliorer'){
     if (era<2) return {ok:false,why:`Disponible à ${ERA2_POP} habitants.`};
     const ub = bld.get(rootOf(i)), c = upCost(ub);
-    if (!c) return {ok:false,why: ub&&ub.build ? 'Chantier en cours.' : ub&&['mine','chemin','tour','rempart','armurerie'].includes(ub.type) ? 'Déjà au niveau maximal.' : 'Touchez une maison, une mine, un chemin, une tour, un rempart ou une armurerie.'};
+    if (!c) return {ok:false,why: ub&&ub.build ? 'Chantier en cours.' : ub&&['mine','chemin','tour','rempart','armurerie','forge'].includes(ub.type) ? 'Déjà au niveau maximal.' : 'Touchez une maison, une mine, un chemin, une tour, un rempart, une forge ou une armurerie.'};
+    if (ub.type==='tour'){ const nx=TOUR_LV[lvlOf(ub)], E=EQUIP[lvlOf(ub)];
+      if ((res[E.key]||0) < nx.soldiers) return {ok:false,why:`Il faut ${nx.soldiers} ${E.k} (${E.name.toLowerCase()}s) en réserve pour équiper ses soldats. Faites-les forger à l’armurerie.`}; }
     if (!afford(c)) return {ok:false,why:`Il faut ${costTxt(c)}.`};
     return {ok:true};
   }
@@ -600,14 +620,16 @@ function act(tl,t){
     t.river=false; t.canal=false; delete t.src; t.h = t.h0 ?? t.h; delete t.h0;
     paint(t); for (const [dx,dy] of NB){ const n=at(t.x+dx,t.y+dy); if (n) paint(n); } toast('Canal comblé.');
   }
-  else if (tl==='demolir'){ const r=rootOf(i), ob=bld.get(r), n=B[ob.type].name; if (ob.arms) res.armes=(res.armes||0)+ob.arms; if (occ.has(i)) unregisterBig(r); bld.delete(r); pop=Math.min(pop,capOf()); toast(`${n} : démoli`); if (selected && rootOf(I(selected.x,selected.y))===r) selected=null; }
+  else if (tl==='demolir'){ const r=rootOf(i), ob=bld.get(r), n=B[ob.type].name; if (ob.arms){ const k=EQUIP[tierOf(ob)-1].key; res[k]=(res[k]||0)+ob.arms; } if (occ.has(i)) unregisterBig(r); bld.delete(r); pop=Math.min(pop,capOf()); toast(`${n} : démoli`); if (selected && rootOf(I(selected.x,selected.y))===r) selected=null; }
   else if (tl==='ameliorer'){
     const b = bld.get(rootOf(i)); pay(upCost(b));
     if (b.type==='maison'){ b.type='machiya'; toast('Maison améliorée : 8 places'); }
     else if (b.type==='chemin'){ b.lvl = lvlOf(b)+1; toast(`${ROAD_LV[b.lvl-1].name}`); }
-    else if (b.type==='tour'){ b.lvl = lvlOf(b)+1; const L=TOUR_LV[b.lvl-1]; const nr=towerReveal(rootOf(i)); toast(`${L.name} : vue sur ${L.see} cases${nr?` (+${nr} découvertes)`:''}, ${L.soldiers} soldats`); }
+    else if (b.type==='tour'){ const old=EQUIP[lvlOf(b)-1].key; if (b.arms) res[old]=(res[old]||0)+b.arms; b.arms=0;   // les anciennes armes retournent en réserve
+      b.lvl = lvlOf(b)+1; const L=TOUR_LV[b.lvl-1]; const nr=towerReveal(rootOf(i)); toast(`${L.name} : vue sur ${L.see} cases${nr?` (+${nr} découvertes)`:''}, ${L.soldiers} soldats`); }
     else if (b.type==='rempart'){ b.lvl = lvlOf(b)+1; toast(WALL_LV[b.lvl-1].name); }
-    else if (b.type==='armurerie'){ b.lvl = 2; toast(`${ARM_LV[1].name} : ${ARM_LV[1].out} 刀 par jour, ${ARM_LV[1].workers} forgerons`); }
+    else if (b.type==='armurerie'){ b.lvl = 2; toast(`${ARM_LV[1].name} : 2 pièces par jour, armures 鎧 possibles`); }
+    else if (b.type==='forge'){ b.lvl = 2; toast(`${FORGE_LV[1].name} : 2 鋼 par jour`); }
     else { b.lvl = lvlOf(b)+1; const L=MINE_LV[b.lvl-1]; toast(`Mine niveau ${b.lvl} · ${L.name} : production ×${L.mult}`); }
   }
   else if (isBig(tl)){
@@ -640,25 +662,56 @@ function computeWalls(){
     for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) if ((dx||dy) && inB(x+dx,y+dy)) push(I(x+dx,y+dy)); }
   for (let j=0;j<N*N;j++) if (!out[j] && !wm[j]) encl[j]=1;
 }
+// Armée : les soldats sont des habitants logés dans les postes de garde (8) et le château (30)
+let soldierCap = 0, soldierUsed = 0, soldierNeed = 0;
+function computeSoldierCap(){
+  soldierCap = 0;
+  for (const [i,b] of bld){ const c = SOLDIER_CAP[b.type]; if (c && !b.build && linked(i,b)) soldierCap += c; }
+}
+// Ce qu'il manque pour équiper tous les soldats en poste, par équipement
+function equipNeeds(){
+  const need=[0,0,0];
+  for (const [,b] of bld){ if (!B[b.type].mil || b.build) continue; need[tierOf(b)-1] += Math.max(0, workersOf(b)-(b.arms||0)); }
+  return need;
+}
 function allocate(){
-  computeNet(); computeWalls();
-  let free = Math.floor(pop), prodRiz = 0;
-  for (const [i,b] of bld){
+  computeNet(); computeWalls(); computeSoldierCap();
+  let free = Math.floor(pop), prodRiz = 0; soldierUsed = 0; soldierNeed = 0;
+  // les postes de garde et le château passent d'abord : ce sont eux qui logent les soldats des tours
+  const order = [...bld].sort((a,b)=>(SOLDIER_CAP[b[1].type]?1:0)-(SOLDIER_CAP[a[1].type]?1:0));
+  for (const [i,b] of order){
     const d = B[b.type], t = tiles[i]; b.state='ok';
     const wk = workersOf(b); if (!wk) continue;
+    if (d.mil && !b.build) soldierNeed += wk;
     if (b.type==='mine' && !connected(t)){ b.state='route'; continue; }
     if (d.road && !b.build && !linked(i,b)){ b.state='route'; continue; }
+    if (d.mil && !b.build && soldierUsed + wk > soldierCap){ b.state='soldats'; continue; }
     if (free < wk){ b.state='bras'; continue; }
-    if (d.mil && !b.build){                       // chaque soldat reçoit une arme une fois pour toutes
-      const need = wk-(b.arms||0), take = Math.min(Math.max(0,need), Math.floor(res.armes||0));
-      if (take>0){ res.armes -= take; b.arms = (b.arms||0)+take; }
-      if ((b.arms||0) < wk){ b.state='armes'; continue; } }
-    if (b.type==='armurerie' && !b.build && (res.tetsu<2 || res.bois<1)){ b.state='fer'; continue; }
+    if (d.mil && !b.build){                       // chaque soldat reçoit l'équipement de son poste, une fois pour toutes
+      const E = EQUIP[tierOf(b)-1], need = wk-(b.arms||0), take = Math.min(Math.max(0,need), Math.floor(res[E.key]||0));
+      if (take>0){ res[E.key] -= take; b.arms = (b.arms||0)+take; }
+      if ((b.arms||0) < wk){ b.state='armes'; continue; }
+      soldierUsed += wk; }
+    if (b.type==='forge' && (res.tetsu<2 || res.bois<2)){ b.state='fer'; continue; }
+    if (b.type==='armurerie' && !b.build && !armoryPick(b)){ b.state = armoryPick(b,true) ? 'acier' : 'repos'; continue; }
     free -= wk;
     if (d.prod && d.prod.riz) prodRiz += d.prod.riz + (encl[i]?1:0);
   }
   rizRate = prodRiz - pop*EAT;
   recomputeTerr();
+}
+// Armurerie : ce qu'elle forge aujourd'hui. Auto = d'abord ce qui manque aux soldats en poste,
+// puis de quoi élever une tour au niveau suivant ; sinon elle garde l'acier.
+const ARM_MODES = ['auto','yari','armes','yoroi'];
+function armoryPick(b, anyCost=false){
+  const ok = E => (!E.lvl || lvlOf(b)>=E.lvl) && (anyCost || afford(E.cost));
+  const mode = b.mode||'auto';
+  if (mode!=='auto'){ const E=EQUIP.find(e=>e.key===mode); return E && ok(E) ? E : null; }
+  const need = equipNeeds();
+  for (let k=0;k<3;k++) if (need[k] > (res[EQUIP[k].key]||0) && ok(EQUIP[k])) return EQUIP[k];
+  for (let k=1;k<3;k++){ const want = Math.max(0,...[...bld.values()].filter(x=>x.type==='tour' && lvlOf(x)===k).map(()=>TOUR_LV[k].soldiers));
+    if (want && (res[EQUIP[k].key]||0) < want && ok(EQUIP[k])) return EQUIP[k]; }
+  return null;
 }
 function runDay(){
   allocate();
@@ -666,10 +719,15 @@ function runDay(){
   for (const [i,b] of bld){
     if (b.state!=='ok' || !workersOf(b)) continue;
     const d = B[b.type], t = tiles[i], mult = multOf(b)*(b.type==='mine'?roadBonus(t):1);
+    if (b.type==='forge'){
+      const n = Math.min(FORGE_LV[lvlOf(b)-1].out, Math.floor(res.tetsu/2), Math.floor(res.bois/2));
+      if (n>0){ res.tetsu-=2*n; res.bois-=2*n; res.hagane=(res.hagane||0)+n;
+        if (floaters.length<90){ const [sx,sy]=pos(t); floaters.push({x:sx,y:sy-4,txt:`+${n}鋼`,c:RES.hagane.color,t0:now+Math.random()*400}); } }
+      continue; }
     if (b.type==='armurerie' && !b.build){
-      const n = Math.min(ARM_LV[lvlOf(b)-1].out, Math.floor(res.tetsu/2), Math.floor(res.bois));
-      if (n>0){ res.tetsu-=2*n; res.bois-=n; res.armes=(res.armes||0)+n;
-        if (floaters.length<90){ const [sx,sy]=pos(t); floaters.push({x:sx+8,y:sy-6,txt:`+${n}刀`,c:RES.armes.color,t0:now+Math.random()*400}); } }
+      let made = 0; const out = ARM_LV[lvlOf(b)-1].out, got = [];
+      for (let k=0;k<out;k++){ const E = armoryPick(b); if (!E) break; pay(E.cost); res[E.key]=(res[E.key]||0)+1; made++; got.push(E.k); }
+      if (made && floaters.length<90){ const [sx,sy]=pos(t); floaters.push({x:sx+8,y:sy-6,txt:'+'+got.join(''),c:RES.armes.color,t0:now+Math.random()*400}); }
       continue; }
     if (!d.prod || b.build) continue;
     const gains = Object.assign({}, d.prod); if (b.type==='mine') gains[t.ore] = ORES[t.ore].rate;
@@ -695,8 +753,8 @@ function runDay(){
   }
   for (const [i,b] of bld){ if (!b.build) continue; advanceSite(i,b,now); }
   day++;
-  if (era<2 && pop>=ERA2_POP){ era=2; setTimeout(()=>toast('Nouvelle ère : chemins, ponts, mines, armurerie, tours de guet et remparts'),1200); buildTools(); }
-  if (era===2 && pop>=ERA3_POP){ era=3; setTimeout(()=>toast('Ère III : temples, postes de garde et château'),1200); buildTools(); }
+  if (era<2 && pop>=ERA2_POP){ era=2; setTimeout(()=>toast('Nouvelle ère : chemins, mines, forge, armurerie, postes de garde, tours de guet et remparts'),1200); buildTools(); }
+  if (era===2 && pop>=ERA3_POP){ era=3; setTimeout(()=>toast('Ère III : temples et château'),1200); buildTools(); }
   allocate(); refreshUI(); save(); dirty=true;
 }
 // Tours de guet : leurs guetteurs cartographient tout ce qui est à portée de vue, dès la construction
@@ -1679,8 +1737,43 @@ function drawGrand(type,u0,u1,v0,v1,z,rt){
   const hw=(du+dv)*TW/2+8, dn=(du+dv)*TH/2+8, up=(du+dv)*TH/2+BIG_H[type]*HS+16;
   blitBig('B'+type+(A?1:0), ()=>{ const h=HFat(A,0,0,0); h.oz=0; type==='temple' ? drawTempleD(h) : drawCastleD(h); }, x, y, hw, up, dn);
 }
+/* --- Forge (tatara) : fourneau d'argile sous un hangar, soufflets, charbon, scories et lingots d'acier --- */
+function bar(h,a,b,z,col){ hbox(h,a,a+.13,b,b+.05,z,z+.07,col); }
+const FORGES = [ h => forgeD(h,1), h => forgeD(h,2) ];
+function forgeD(h,lv){
+  shadowH(h,-.46,.46,-.44,.44);
+  h.Q([[-.48,-.48,0],[.48,-.48,0],[.48,.48,0],[-.48,.48,0]],'#8a7a60');
+  for (const [a,b,r] of [[.25,.32,1.7],[-.3,.36,1.3],[.36,-.05,1.1]]){ const [x,y]=h.L(a,b,0); ctx.fillStyle='rgba(50,40,32,.55)'; ctx.beginPath(); ctx.ellipse(x,y,r*1.6,r*.7,0,0,7); ctx.fill(); }
+  const P0=-.4, P1=.3, Q0=-.4, Q1=.24, PH = lv>1 ? 2.6 : 2.3;
+  const post=(a,b)=>{ ctx.lineCap='butt'; ctx.strokeStyle=shade(DARKW,h.kA); ctx.lineWidth=1.05; ctx.beginPath(); ctx.moveTo(...h.L(a,b,0)); ctx.lineTo(...h.L(a,b,PH)); ctx.stroke(); ctx.lineCap='round'; };
+  // mur de fond (niv. 2 : enduit et colombages)
+  if (lv>1){ hbox(h,P0,P1,Q0-.04,Q0,0,PH,'#e9e1cf',false); }
+  post(P0,Q0); post(P1,Q0); post(P0,Q1);
+  // soufflets (fuigo) à planche basculante, de part et d'autre
+  for (const b of [Q0+.06,Q1-.16]){ hbox(h,-.32,.05,b,b+.1,0,.28,'#6b4a2a'); { const f=FB(h,-.32,.05,b+.1); planks(f,0,.28); } }
+  // fourneau d'argile, braise au sommet
+  hbox(h,-.22,-.04,-.22,.02,0,1.05,'#9a5a3a'); for (const f of [FB(h,-.22,-.04,.02),FA(h,-.22,.02,-.04)]){ for (const z of [.3,.6,.85]) fline(f,0,z,1,z,'#6e3e26',.3); }
+  h.Q([[-.2,-.2,1.06],[-.06,-.2,1.06],[-.06,0,1.06],[-.2,0,1.06]],'#3a1a0c'); h.Q([[-.18,-.17,1.07],[-.08,-.17,1.07],[-.08,-.03,1.07],[-.18,-.03,1.07]],'#f39a3c');
+  { const f=FB(h,-.22,-.04,.02); frect(f,.3,.7,.05,.3,'#f08a3a'); }
+  { const [x,y]=h.L(-.13,-.1,1.1); const g=ctx.createRadialGradient(x,y,0,x,y,6); g.addColorStop(0,'rgba(255,170,80,.55)'); g.addColorStop(1,'rgba(255,170,80,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,6,0,7); ctx.fill();
+    ctx.fillStyle='#ffd27a'; for (const [dx,dy] of [[-1,-2.5],[1.2,-3.6],[.2,-4.8],[-.8,-5.4]]){ ctx.beginPath(); ctx.arc(x+dx,y+dy,.3,0,7); ctx.fill(); } }
+  // enclume, bac de trempe
+  hbox(h,.1,.2,-.12,-.02,0,.36,'#5a3d22'); hbox(h,.06,.25,-.1,-.04,.36,.5,'#4c525a');
+  hbox(h,.12,.28,.06,.2,0,.28,'#6b4a2a'); h.Q([[.13,.07,.29],[.27,.07,.29],[.27,.19,.29],[.13,.19,.29]],'#4f8fa0');
+  post(P1,Q1);
+  if (lv>1) irimoya(h,P0,P1,Q0,Q1,PH,1.5,TIL,'#ece6da',{ov:.14,thick:.25});
+  else kiri(h,P0,P1,Q0,Q1,PH,1.15,THA,'#8e6b47',{kind:'thatch',ov:.09,thick:.35,vent:true});
+  { const [x,y]=h.L(-.13,-.1,PH+(lv>1?1.6:1.3)); hsmoke(x,y,1.1); }
+  // charbon de bois, lingots d'acier, scories
+  { const [x,y]=h.L(.38,.3,0); tawara(x,y+.4,.8); tawara(x+2,y-.6,.75); }
+  for (let r=0;r<(lv>1?3:2);r++) for (let q=0;q<3-r;q++) bar(h,-.38+q*.06+r*.03,.34,r*.07,'#9aa4ad');
+  for (const [a,b] of [[-.42,.05],[-.4,.18]]){ const [x,y]=h.L(a,b,0); ctx.fillStyle='#3c3530'; ctx.beginPath(); ctx.ellipse(x,y-.4,1.4,.9,0,0,7); ctx.fill(); }
+  if (lv>1) nobori(h,.42,-.36,0,5.2,'#8e3a24','#efe6cf');
+}
+function forgeSprite(t,b,sx,sy){ const A=(hash(t.y*3+2,t.x*5+1)<.5)!==((rot&1)===1), lv=lvlOf(b); blit('K'+lv+(A?1:0), ()=>FORGES[lv-1](HF(A)), sx, sy); }
 function drawBuilding(b,t,sx,sy){
   switch(b.type){
+    case 'forge': forgeSprite(t,b,sx,sy); break;
     case 'tour': drawWatch(t,b,sx,sy); return;
     case 'rempart': drawWall(t,b,sx,sy); return;
     case 'porte': drawGate(t,b,sx,sy); return;
@@ -1692,7 +1785,7 @@ function drawBuilding(b,t,sx,sy){
     case 'bucheron': campSprite(t,sx,sy); break;
     case 'mine': { if (!faceOf(t)){ block(sx,sy,.3,4,'#6a4528','#4a3420'); if (b.state!=='ok') badgeAt(sx+7,sy-14); } return; }
   }
-  if (workersOf(b) && b.state!=='ok') badgeAt(sx+7,sy-17);
+  if (workersOf(b) && b.state!=='ok' && b.state!=='repos') badgeAt(sx+7,sy-17);
 }
 
 /* ---------- Grands bâtiments sur plusieurs cases ---------- */
@@ -1890,7 +1983,7 @@ function drawBig(root, b){
     return;
   }
   drawIt();
-  if (workersOf(b) && b.state!=='ok'){ const [x,y]=V((u0+u1)/2,(v0+v1)/2,z+Htot); badgeAt(x,y); }
+  if (workersOf(b) && b.state!=='ok' && b.state!=='repos'){ const [x,y]=V((u0+u1)/2,(v0+v1)/2,z+Htot); badgeAt(x,y); }
 }
 /* --- Compositions : chaque grand bâtiment est un ensemble d'éléments placés dans le repère de son emprise (x, y) --- */
 // Arbres de jardin
@@ -2534,10 +2627,14 @@ function renderRes(){
   const chips = [['pop', `${Math.floor(pop)}/${cap}`], ['riz', Math.floor(res.riz)], ['bois', Math.floor(res.bois)]];
   if (era>=2 || res.pierre>0) chips.push(['pierre', Math.floor(res.pierre)]);
   for (const k of ['tetsu','dou','kin']) if (res[k]>0) chips.push([k, Math.floor(res[k])]);
-  if (res.armes>0 || [...bld.values()].some(b=>b.type==='armurerie')) chips.push(['armes', Math.floor(res.armes||0)]);
-  $('res').innerHTML = chips.map(([k,v])=>`<div class="chip${k==='riz'&&rizRate<0?' warn':''}" title="${RES[k].name}${k==='riz'?` (${rizRate>=0?'+':''}${rizRate.toFixed(1)} par jour)`:''}"><b style="background:${RES[k].color}">${RES[k].k}</b>${v}</div>`).join('');
+  const hasF = [...bld.values()].some(b=>b.type==='forge'||b.type==='armurerie');
+  if (hasF || res.hagane>0) chips.push(['hagane', Math.floor(res.hagane||0)]);
+  for (const E of EQUIP) if (res[E.key]>0) chips.push([E.key, Math.floor(res[E.key])]);
+  if (soldierCap || soldierNeed) chips.push(['sold', `${soldierUsed}/${soldierCap}`]);
+  const RX = Object.assign({}, RES, { sold:{k:'兵',name:'Soldats en poste / logés dans les postes de garde',color:'#b4462e'} });
+  $('res').innerHTML = chips.map(([k,v])=>`<div class="chip${k==='riz'&&rizRate<0?' warn':''}" title="${RX[k].name}${k==='riz'?` (${rizRate>=0?'+':''}${rizRate.toFixed(1)} par jour)`:''}"><b style="background:${RX[k].color}${k==='sold'?';color:#fff':''}">${RX[k].k}</b>${v}</div>`).join('');
 }
-const TOOL_LIST = ['riziere','maison','bucheron','defricher','canal','chemin','pont','mine','ameliorer','armurerie','tour','rempart','temple','garde','chateau','demolir'];
+const TOOL_LIST = ['riziere','maison','bucheron','defricher','canal','chemin','pont','mine','ameliorer','forge','armurerie','garde','tour','rempart','temple','chateau','demolir'];
 const DEFRICHER = { k:'伐', name:'Défricher', era:1, cost:null, hint:'Rase la forêt case par case · +3 木 par case' };
 const CANAL = { k:'渠', name:'Canal', era:1, cost:{bois:3}, hint:'Prolonge une rivière ou un canal d’une case' };
 const toolDef = id => id==='ameliorer' ? {k:'改',name:'Améliorer',cost:B.machiya.cost,era:2}
@@ -2545,9 +2642,9 @@ const toolDef = id => id==='ameliorer' ? {k:'改',name:'Améliorer',cost:B.machi
 let paletteOpen=false, villageOpen=false;
 function buildTools(){
   const items = TOOL_LIST.filter(id=>era>=toolDef(id).era);
-  const next = era<2 ? `À ${ERA2_POP} habitants : tours de guet pour découvrir la province, chemins, ponts, mines, armurerie et remparts.` : era<3 ? `À ${ERA3_POP} habitants : temple, poste de garde, château.` : 'Bientôt : maison de santé.';
+  const next = era<2 ? `À ${ERA2_POP} habitants : chemins, mines, forge, armurerie, postes de garde, tours de guet et remparts.` : era<3 ? `À ${ERA3_POP} habitants : temple et château.` : 'Bientôt : maison de santé.';
   $('tools').innerHTML = items.map(id=>{ const d=toolDef(id);
-    const c = id==='ameliorer' ? 'maison, mine, chemin, tour, rempart' : id==='rempart' ? `${costTxt(d.cost)} la case` : id==='defricher' ? '1 case · +3 木' : d.w ? `${d.w}×${d.h} · chantier ${d.days} j` : d.cost ? costTxt(d.cost) : '';
+    const c = id==='ameliorer' ? 'bâtiment, chemin, rempart' : id==='rempart' ? `${costTxt(d.cost)} la case` : id==='defricher' ? '1 case · +3 木' : d.w ? `${d.w}×${d.h} · chantier ${d.days} j` : d.cost ? costTxt(d.cost) : '';
     return `<button class="tool" data-tool="${id}" aria-pressed="${tool===id}" type="button" title="${d.hint||''}"><span class="k">${d.k}</span><span class="l">${d.name}</span><span class="c">${c}</span></button>`;
   }).join('') + `<div class="next">${next}</div>`;
   $('tools').querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>{ setTool(b.dataset.tool); setPalette(false); }));
@@ -2585,29 +2682,31 @@ function goalsHTML(){
     [mineOk, 'Faire tourner une mine reliée au village', ''],
     [n('machiya')>=1, 'Améliorer une maison', ''],
     [[...bld.values()].some(b=>b.type==='mine'&&lvlOf(b)>=2), 'Agrandir une mine', ''],
-    [res.armes>0 || towerOk, 'Forger des armes à l’armurerie', ''],
-    [towerOk, 'Armer une tour de guet reliée au village', '']
+    [res.hagane>0 || [...bld.values()].some(b=>b.type==='armurerie'), 'Fondre de l’acier 鋼 à la forge', ''],
+    [n('garde')>=1, 'Établir un poste de garde pour loger des soldats', ''],
+    [towerOk, 'Poster des soldats armés dans une tour de guet', '']
   ];
   const g3 = [
     [n('temple')>=1, 'Bâtir un temple (5×7)', ''],
-    [n('garde')>=1, 'Établir un poste de garde (3×3)', ''],
+    [[...bld.values()].some(b=>b.type==='tour'&&lvlOf(b)>=2), 'Élever une tour de pierre (soldats au sabre 刀)', ''],
     [enclOk, 'Fermer une enceinte de remparts', ''],
     [n('chateau')>=1, 'Élever le château (9×9)', '']
   ];
   const G = era<2?g1:era<3?g2:g3; goalsLeft = G.filter(g=>!g[0]).length;
   const list = G.map(([d,l,p])=>`<li><span class="m">${d?'✓':'・'}</span><span class="${d?'done':''}">${l} ${p&&!d?`<small>(${p})</small>`:''}</span></li>`).join('');
   return `<div class="era">${['','Ère I · Le village','Ère II · Vers les montagnes','Ère III · Le domaine'][era]}</div><ul class="goals">${list}</ul>
-    <p>${era<2?'Ensuite : tours de guet pour découvrir la province, chemins, ponts, mines, armurerie et remparts.':era<3?`Tours de guet armées et reliées par la route : elles étendent vos terres ; les remparts proches les renforcent. À ${ERA3_POP} habitants : temples, postes de garde et château pour agrandir et protéger vos terres.`:'Les soldats doivent rester armés, en poste et reliés par la route : sans eux, les terres qu’ils protègent ne sont plus à vous.'}</p>`;
+    <p>${era<2?'Ensuite : chemins, mines, forge et armurerie, postes de garde et tours de guet pour découvrir la province.':era<3?`Minerai → forge (acier 鋼) → armurerie (槍 刀 鎧). Les soldats logent dans les postes de garde et vont armer les tours. À ${ERA3_POP} habitants : temples et château pour agrandir et protéger vos terres.`:'Les soldats doivent rester armés, en poste et reliés par la route : sans eux, les terres qu’ils protègent ne sont plus à vous.'}</p>`;
 }
 const STATE = { site:['ok','Chantier en cours'], wait:['bad','Chantier en attente de matériaux'], ok:['ok','En activité'], bras:['bad','Manque de bras'], route:['bad','Pas de chemin relié au village devant l’entrée'],
-  route2:['bad','Pas relié au village par un chemin'], armes:['bad','Soldats sans armes : forgez des 刀'], fer:['bad','Manque de fer (2 鉄) ou de bois'] };
+  route2:['bad','Pas relié au village par un chemin'], armes:['bad','Soldats pas encore équipés'], fer:['bad','Manque de minerai (2 鉄) ou de bois (2 木)'],
+  soldats:['bad','Pas assez de soldats : construisez un poste de garde'], acier:['bad','Manque d’acier 鋼 (ou de cuivre 銅 pour les armures)'], repos:['ok','Au repos : rien à forger pour l’instant'] };
 let lastInfoKey = '';
 function armyRows(){
   let posts=0, active=0, sold=0, need=0;
   for (const [,b] of bld){ if (!B[b.type].mil || b.build) continue; posts++; need+=workersOf(b); if (b.state==='ok'){ active++; sold+=workersOf(b); } }
-  if (!posts && !(res.armes>0)) return '';
-  const ne = encl.reduce((a,v)=>a+v,0);
-  return `<dt>Armée</dt><dd>${sold} / ${need} soldats en poste</dd><dt>Postes actifs</dt><dd>${active} / ${posts}</dd><dt>Armes en réserve</dt><dd>${Math.floor(res.armes||0)} 刀</dd>${ne?`<dt>Enceinte</dt><dd>${ne} parcelles</dd>`:''}`;
+  if (!posts && !soldierCap) return '';
+  const ne = encl.reduce((a,v)=>a+v,0), eq = EQUIP.map(E=>`${Math.floor(res[E.key]||0)} ${E.k}`).join(' · ');
+  return `<dt>Soldats</dt><dd>${soldierUsed} en poste · ${soldierCap} logés</dd><dt>Postes actifs</dt><dd>${active} / ${posts}</dd><dt>Équipement en réserve</dt><dd>${eq}</dd><dt>Acier</dt><dd>${Math.floor(res.hagane||0)} 鋼</dd>${ne?`<dt>Enceinte</dt><dd>${ne} parcelles</dd>`:''}`;
 }
 function showInfo(){
   const el = $('info');
@@ -2628,7 +2727,7 @@ function showInfo(){
   if (b){
     const d = B[b.type];
     const isMine = b.type==='mine', lv = lvlOf(b), mult = multOf(b);
-    const title = isMine ? `Mine · niv. ${lv}` : b.type==='chemin' ? ROAD_LV[lv-1].name : b.type==='tour' ? TOUR_LV[lv-1].name : b.type==='rempart' ? WALL_LV[lv-1].name : b.type==='armurerie' ? ARM_LV[lv-1].name : d.name;
+    const title = isMine ? `Mine · niv. ${lv}` : b.type==='chemin' ? ROAD_LV[lv-1].name : b.type==='tour' ? TOUR_LV[lv-1].name : b.type==='rempart' ? WALL_LV[lv-1].name : b.type==='armurerie' ? ARM_LV[lv-1].name : b.type==='forge' ? FORGE_LV[lv-1].name : d.name;
     const sub = isMine ? `${MINE_LV[lv-1].name} · ${RES[t.ore].name.toLowerCase()}` : d.w ? `${d.w}×${d.h} cases` : `Parcelle ${t.x}·${t.y} · ${T.name.toLowerCase()}`;
     head = `<div class="bigk">${b.type==='chemin'?ROAD_LV[lv-1].k:b.type==='rempart'?WALL_LV[lv-1].k:d.k}</div><div><h2>${title}</h2><div class="coord">${sub}</div></div>`;
     if (b.build){ const p=siteProgress(b), C=d.cost;
@@ -2636,20 +2735,28 @@ function showInfo(){
       for (const k in C) rows += `<dt>${RES[k].k} ${RES[k].name}</dt><dd>${Math.min(C[k],b.build.got[k]||0)} / ${C[k]}</dd>`;
       const left = Math.max(...Object.keys(C).map(k=>Math.ceil((C[k]-(b.build.got[k]||0))/Math.ceil(C[k]/d.days))));
       rows += `<dt>Fin au plus tôt</dt><dd>dans ${left} jour${left>1?'s':''}</dd>`; }
-    if (workersOf(b)){ let st = b.build ? (b.state!=='ok' ? 'bras' : b.build.wait ? 'wait' : 'site') : b.state; if (st==='route' && !isMine) st='route2'; const [c,l] = STATE[st]; rows += `<dt>État</dt><dd><span class="state ${c}">${l}${b.build&&b.build.wait&&b.build.missing?' : '+b.build.missing.join(' '):''}</span></dd><dt>${b.build?'Charpentiers':d.mil?'Soldats':b.type==='armurerie'?'Forgerons':'Ouvriers'}</dt><dd>${workersOf(b)}</dd>`;
+    if (workersOf(b)){ let st = b.build ? (b.state!=='ok' ? 'bras' : b.build.wait ? 'wait' : 'site') : b.state; if (st==='route' && !isMine) st='route2'; const [c,l] = STATE[st]; rows += `<dt>État</dt><dd><span class="state ${c}">${l}${b.build&&b.build.wait&&b.build.missing?' : '+b.build.missing.join(' '):''}</span></dd><dt>${b.build?'Charpentiers':d.mil?'Soldats':b.type==='armurerie'?'Armuriers':b.type==='forge'?'Forgerons':'Ouvriers'}</dt><dd>${workersOf(b)}</dd>`;
       const r1 = v => +(v*mult).toFixed(1);
       const p = Object.entries(d.prod||{}).map(([k,v])=>`${r1(v)} ${RES[k].k}`); if (isMine) p.push(`${r1(ORES[t.ore].rate)} ${RES[t.ore].k}`);
       if (p.length) rows += `<dt>Par jour</dt><dd>${p.join(' + ')}</dd>`; }
     if (d.mil && !b.build){ const g = guardOf(i,b);
-      rows += `<dt>Armés</dt><dd>${Math.min(b.arms||0,workersOf(b))} / ${workersOf(b)} 刀</dd>`;
+      { const E=EQUIP[tierOf(b)-1]; rows += `<dt>Équipés</dt><dd>${Math.min(b.arms||0,workersOf(b))} / ${workersOf(b)} ${E.k} ${E.name.toLowerCase()}${workersOf(b)>1?'s':''}</dd>`; }
+      if (SOLDIER_CAP[b.type]) rows += `<dt>Caserne</dt><dd>loge ${SOLDIER_CAP[b.type]} soldats</dd>`;
       rows += `<dt>Protège</dt><dd>${g.r} cases autour${b.state==='ok'?'':' — inactif'}</dd>`;
       rows += `<dt>Remparts proches</dt><dd>${g.bonus ? `+${g.bonus} case${g.bonus>1?'s':''}` : '—'}${g.bonus<g.cap ? ` (${g.pts%WALL_PER_STEP}/${WALL_PER_STEP} pour la suivante)` : ' · maximum'}</dd>`; }
     if (b.type==='tour') rows += `<dt>Vue</dt><dd>${TOUR_LV[lv-1].see} cases autour, même sans soldats</dd>`;
     if (b.type==='tour' && lv<TOUR_LV.length){ const nx=TOUR_LV[lv];
-      rows += `<dt>${nx.name}</dt><dd>vue ${nx.see} · ${nx.soldiers} soldats, ${nx.r} cases</dd>`;
-      acts += `<button class="act" id="aUp" type="button" ${canBuild('ameliorer',t).ok?'':'disabled'}>Élever · ${costTxt(nx.cost)}</button>`; }
-    if (b.type==='armurerie' && !b.build){ const A=ARM_LV[lv-1];
-      rows += `<dt>Par jour</dt><dd>${2*A.out} 鉄 + ${A.out} 木 → ${A.out} 刀</dd><dt>En réserve</dt><dd>${Math.floor(res.armes||0)} 刀</dd>`;
+      const E=EQUIP[lv]; rows += `<dt>${nx.name}</dt><dd>vue ${nx.see} · ${nx.soldiers} soldats ${E.k}, ${nx.r} cases</dd>`;
+      const cu=canBuild('ameliorer',t); if (!cu.ok) rows += `<dt>Pour l’élever</dt><dd>${Math.floor(res[E.key]||0)} / ${nx.soldiers} ${E.k} en réserve</dd>`;
+      acts += `<button class="act" id="aUp" type="button" ${cu.ok?'':'disabled'}>Élever · ${costTxt(nx.cost)} + ${nx.soldiers} ${E.k}</button>`; }
+    if (b.type==='forge'){ const F=FORGE_LV[lv-1];
+      rows += `<dt>Par jour</dt><dd>${2*F.out} 鉄 + ${2*F.out} 木 → ${F.out} 鋼</dd><dt>Acier en réserve</dt><dd>${Math.floor(res.hagane||0)} 鋼</dd>`;
+      if (lv<FORGE_LV.length) acts += `<button class="act" id="aUp" type="button" ${canBuild('ameliorer',t).ok?'':'disabled'}>${FORGE_LV[lv].name} · ${costTxt(FORGE_LV[lv].cost)}</button>`; }
+    if (b.type==='armurerie' && !b.build){ const A=ARM_LV[lv-1], mode=b.mode||'auto', nx=armoryPick(b);
+      rows += `<dt>Par jour</dt><dd>${A.out} pièce${A.out>1?'s':''}</dd>`;
+      for (const E of EQUIP) rows += `<dt>${E.k} ${E.name}</dt><dd>${costTxt(E.cost)}${E.lvl&&lv<E.lvl?' · atelier d’armurier':''} · ${Math.floor(res[E.key]||0)} en réserve</dd>`;
+      rows += `<dt>Prochaine pièce</dt><dd>${nx?nx.k+' '+nx.name:'rien'}</dd>`;
+      acts += `<div class="acts" style="width:100%">${ARM_MODES.map(m=>{ const E=EQUIP.find(e=>e.key===m); return `<button class="act ${mode===m?'':'alt'}" data-mode="${m}" type="button">${m==='auto'?'Auto':E.k+' '+E.name}</button>`; }).join('')}</div>`;
       if (lv<ARM_LV.length) acts += `<button class="act" id="aUp" type="button" ${canBuild('ameliorer',t).ok?'':'disabled'}>${ARM_LV[lv].name} · ${costTxt(ARM_LV[lv].cost)}</button>`; }
     if (b.type==='rempart'){
       rows += `<dt>Renfort</dt><dd>${WALL_LV[lv-1].pts} point${lv>1?'s':''} pour les postes à portée</dd>`;
@@ -2692,9 +2799,10 @@ function showInfo(){
   if ($('aUp')) $('aUp').onclick = ()=>act('ameliorer',t);
   if ($('aDel')) $('aDel').onclick = ()=>act('demolir',t);
   el.querySelectorAll('[data-b],[data-x]').forEach(x=>x.onclick=()=>{ act(x.dataset.b||x.dataset.x,t); showInfo(); });
+  el.querySelectorAll('[data-mode]').forEach(x=>x.onclick=()=>{ const ab=bld.get(rootOf(I(t.x,t.y))); ab.mode=x.dataset.mode; allocate(); save(); showInfo(); });
   lastInfoKey = infoKey();
 }
-const infoKey = () => { if(!selected) return ''; const i=I(selected.x,selected.y), b=bld.get(i); return [selected.forest,selected.river,b&&b.type,b&&b.state,b&&b.lvl,b&&b.arms,b&&b.build&&JSON.stringify(b.build.got),rot,Math.floor(res.pierre/5),Math.floor(res.bois/5),Math.floor(res.riz/5),Math.floor(res.tetsu/5),Math.floor(res.armes||0),walls.length,encl[i],era].join('|'); };
+const infoKey = () => { if(!selected) return ''; const i=I(selected.x,selected.y), b=bld.get(i); return [selected.forest,selected.river,b&&b.type,b&&b.state,b&&b.lvl,b&&b.arms,b&&b.build&&JSON.stringify(b.build.got),rot,Math.floor(res.pierre/5),Math.floor(res.bois/5),Math.floor(res.riz/5),Math.floor(res.tetsu/5),Math.floor(res.armes||0),Math.floor(res.hagane||0),Math.floor(res.yari||0),Math.floor(res.yoroi||0),b&&b.mode,soldierCap,walls.length,encl[i],era].join('|'); };
 function refreshInfoLight(){ if (infoKey()!==lastInfoKey) showInfo(); }
 
 let toastT;
@@ -2831,13 +2939,13 @@ addEventListener('resize',resize);
 function start(s, saved){
   generate(s);
   bld = new Map(); occ = new Map(); selected=null; hover=null; tool='look'; day=1; rot=0; floaters.length=0; paused=false; speed=0; dayAcc=0;
-  res = { riz:40, bois:35, pierre:0, tetsu:0, dou:0, kin:0, armes:0 }; pop = 5; era = 1; encl = new Uint8Array(N*N); walls = [];
+  res = { riz:40, bois:35, pierre:0, tetsu:0, dou:0, kin:0, hagane:0, yari:0, armes:0, yoroi:0 }; pop = 5; era = 1; encl = new Uint8Array(N*N); walls = [];
   if (saved){
     Object.assign(res, saved.res||{}); pop = saved.pop ?? 5; era = saved.era||1; day = saved.day||1; paused = !!saved.paused; speed = saved.speed||0; rot = saved.rot||0;
     for (const i of saved.cleared||[]) if (tiles[i]){ tiles[i].forest=false; tiles[i].cleared=true; paint(tiles[i]); }
     for (const [i,src,h,h0] of saved.canals||[]) if (tiles[i]){ const t=tiles[i]; t.river=true; t.canal=true; t.src=src; t.h=h; t.h0=h0; }
     if ((saved.canals||[]).length) for (const t of tiles) paint(t);
-    for (const [i,type,lvl,got,arms] of saved.b||[]) if (tiles[i]&&B[type]&&(type!=='mine'||tiles[i].ore)){ const o={type,lvl:lvl||1,state:'ok'}; if (got) o.build={got,wait:false};
+    for (const [i,type,lvl,got,arms,mode] of saved.b||[]) if (tiles[i]&&B[type]&&(type!=='mine'||tiles[i].ore)){ const o={type,lvl:lvl||1,state:'ok'}; if (got) o.build={got,wait:false}; if (mode) o.mode=mode;
       o.arms = arms ?? (B[type].mil && !got ? B[type].workers : 0);          // anciennes parties : les gardes déjà en poste sont armés
       bld.set(i,o); if (isBig(type)) registerBig(i); }
     if (saved.seen){ try { const sn = unpackSeen(saved.seen); if (sn.length===N*N) seen = sn; } catch(e){} }
@@ -2867,7 +2975,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
 });
-const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 10'; }).observe(vl,{childList:true}), vl.textContent += ' · version 10';
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 11'; }).observe(vl,{childList:true}), vl.textContent += ' · version 11';
 </script>
 </body>
 </html>
