@@ -106,6 +106,18 @@ button:focus-visible{outline:2px solid var(--kin);outline-offset:2px}
 .tool[aria-pressed="true"] .c{color:rgba(243,236,220,.7)}
 .tools .next{font-size:10.5px;color:var(--muted);padding:5px 6px 3px;border-top:1px solid var(--washi-2);margin-top:2px;max-width:190px;line-height:1.4}
 
+.place{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:6;
+  display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;width:min(340px,calc(100% - 32px));box-sizing:border-box;
+  background:var(--washi);color:var(--ink);padding:10px 10px 10px 12px;border-radius:8px;box-shadow:0 8px 24px rgba(60,40,20,.4)}
+.place .k{font-family:var(--f-disp);font-weight:800;font-size:24px;width:38px;height:38px;display:grid;place-items:center;border:1.5px solid var(--ink);border-radius:3px}
+.place .t b{display:block;font-family:var(--f-disp);font-size:15px}
+.place .t span{font-size:12px;color:var(--muted)}
+.place .t span.bad{color:var(--shu);font-weight:700}
+.place .bt{grid-column:1/-1;display:flex;gap:8px}
+.place .bt button{flex:1;border:0;border-radius:5px;padding:10px;font-weight:700;font-size:14px;cursor:pointer}
+.place .ok{background:var(--ink);color:var(--washi)} .place .ok:disabled{opacity:.4;cursor:not-allowed}
+.place .no{background:transparent;color:var(--shu);box-shadow:inset 0 0 0 1px var(--shu)}
+.place .hint{grid-column:1/-1;font-size:11px;color:var(--muted);margin-top:-4px}
 .pill{position:fixed;left:50%;transform:translateX(-50%);top:calc(52px + env(safe-area-inset-top,0px));
   display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--washi);padding:5px 5px 5px 12px;border-radius:999px;
   box-shadow:0 6px 18px rgba(60,40,20,.35);font-size:13px;white-space:nowrap;max-width:calc(100% - 32px);z-index:5}
@@ -184,6 +196,7 @@ button:focus-visible{outline:2px solid var(--kin);outline-offset:2px}
 <div class="tools" id="tools" role="toolbar" aria-orientation="vertical" aria-label="Outils de construction" hidden></div>
 <button class="fab build" id="buildBtn" type="button" aria-label="Construire" aria-expanded="false" aria-controls="tools">建</button>
 <div class="pill" id="pill" hidden></div>
+<div class="place" id="place" role="dialog" aria-label="Valider l’emplacement" hidden></div>
 <div class="br">
   <button class="fab village" id="villageBtn" type="button" aria-label="Village et objectifs">村<span class="badge" id="badge" hidden></span></button>
   <div class="clock" id="clock">
@@ -2224,6 +2237,19 @@ function drawCastle(u0,u1,v0,v1,z,extra=0){
   });
 }
 const BIG_H = { temple:16, garde:13, chateau:28, armurerie:10, kura_riz:9, kura_bois:8, kura_ishi:8, kura_kane:9, kura_arme:10 };       // hauteur approximative, en niveaux
+// Aperçu transparent du grand bâtiment à l'emplacement choisi, avant validation
+function drawGhost(type, fp, ok){
+  let umin=1e9,umax=-1e9,vmin=1e9,vmax=-1e9,hi=0,lo=99;
+  for (const t of fp){ const [u,v]=rotXY(t.x,t.y); umin=Math.min(umin,u); umax=Math.max(umax,u); vmin=Math.min(vmin,v); vmax=Math.max(vmax,v); hi=Math.max(hi,t.h); lo=Math.min(lo,t.h); }
+  const u0=umin-.5,u1=umax+.5,v0=vmin-.5,v1=vmax+.5, rt=fp[0], z=hi+.3;
+  ctx.save(); ctx.globalAlpha = ok ? .72 : .4;
+  vbox(u0+.02,u1-.02,v0+.02,v1-.02,lo,z,'#b9b4a8','#8d887d','#a19c91');
+  if (type==='armurerie') drawArmory(u0,u1,v0,v1,z,rt);
+  else if (type==='temple'||type==='chateau'||STORES[type]) drawGrand(type,u0,u1,v0,v1,z,rt);
+  else drawCompo(type, rt.x, rt.y, z);
+  ctx.restore();
+  if (!ok){ ctx.save(); ctx.globalAlpha=.35; VQ([[u0,v0,z],[u1,v0,z],[u1,v1,z],[u0,v1,z]],'#b4462e'); ctx.restore(); }
+}
 function drawBig(root, b){
   const ts = bigTiles(root); let umin=1e9,umax=-1e9,vmin=1e9,vmax=-1e9,hi=0,lo=99;
   for (const t of ts){ const [u,v]=rotXY(t.x,t.y); umin=Math.min(umin,u); umax=Math.max(umax,u); vmin=Math.min(vmin,v); vmax=Math.max(vmax,v); hi=Math.max(hi,t.h); lo=Math.min(lo,t.h); }
@@ -2805,8 +2831,10 @@ function draw(now,tm){
 
   ctx.setTransform(dpr*zoom,0,0,dpr*zoom, dpr*(W/2-cam.x*zoom), dpr*(H/2-cam.y*zoom));
   const vl = cam.x - W/2/zoom - TW, vr = cam.x + W/2/zoom + TW, vt = cam.y - H/2/zoom - TH, vb = cam.y + H/2/zoom + TH;
-  const prev = tool!=='look' && hover ? (tool==='pont' && bridgeStart ? bridgeSpan(bridgeStart,hover) : canBuild(tool,hover)) : null;
-  const fpSet = new Set(); if (hover && isBig(tool)){ const fp=footprint(tool,hover.x,hover.y); if (fp) for (const f of fp) fpSet.add(f); }
+  const aim = (isBig(tool) && pending) || hover;
+  const prev = tool!=='look' && aim ? (tool==='pont' && bridgeStart ? bridgeSpan(bridgeStart,aim) : canBuild(tool,aim)) : null;
+  const fpSet = new Set(); let ghostAt=null, ghostFp=null; if (aim && isBig(tool)){ const fp=footprint(tool,aim.x,aim.y); if (fp){ for (const f of fp) fpSet.add(f);
+    if (pending){ ghostFp=fp; let best=-1; for (const f of fp){ const [u,v]=rotXY(f.x,f.y); if (u+v>best){ best=u+v; ghostAt=f; } } } } }
   if (tool==='pont' && bridgeStart){ fpSet.add(bridgeStart); if (hover && (hover.x===bridgeStart.x || hover.y===bridgeStart.y)){ const n=Math.max(Math.abs(hover.x-bridgeStart.x),Math.abs(hover.y-bridgeStart.y)); for (let k=0;k<=n;k++) fpSet.add(at(bridgeStart.x+Math.sign(hover.x-bridgeStart.x)*k, bridgeStart.y+Math.sign(hover.y-bridgeStart.y)*k)); } }
   const selSet = new Set(); if (selected){ const r=rootOf(I(selected.x,selected.y)); if (occ.has(r)) for (const f of bigTiles(r)) selSet.add(f); }
   let zone = null;                                // zone d'un poste : en aperçu (outil tour) ou sélectionné
@@ -2843,10 +2871,11 @@ function draw(now,tm){
           for (let j=2;j<fp.length;j+=2) ctx.lineTo(fp[j],fp[j+1]); ctx.closePath(); ctx.stroke(); }
         else { diamond(sx,sy); if (fill){ ctx.fillStyle=fill; ctx.fill(); } ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.stroke(); }
       };
-      if (tl===hover || fpSet.has(tl)) hl(prev ? (prev.ok?'rgba(230,214,140,.42)':'rgba(180,70,46,.38)') : null, 'rgba(255,250,235,.9)', 1);
+      if (tl===aim || fpSet.has(tl)) hl(prev ? (prev.ok?(pending?'rgba(150,200,110,.5)':'rgba(230,214,140,.42)'):'rgba(180,70,46,.38)') : null, pending&&isBig(tool)?'#fff8e0':'rgba(255,250,235,.9)', pending&&isBig(tool)?1.6:1);
       if (tl===selected || selSet.has(tl)) hl(null, '#b4462e', 1.8);
       if (b && !isBig(b.type)) drawBuilding(b,tl,sx,sy);
       if (occ.has(i) && isFrontOf(i)) drawBig(occ.get(i), bld.get(occ.get(i)));
+      if (tl===ghostAt) drawGhost(tool, ghostFp, prev && prev.ok);
       if (b && b.type==='chemin') drawSteps(tl,sx,sy);
       if (access.has(i)){
         const oi = access.get(i), ot = tiles[oi], of = faceOf(ot), ob = bld.get(oi);
@@ -2889,7 +2918,7 @@ function pickGround(px,py){        // pour viser une terre encore inconnue
 
 /* ---------- Interface ---------- */
 const $ = id => document.getElementById(id);
-function refreshUI(){ renderRes(); updateBadge(); $('dayLbl').textContent = `Jour ${day}`; if (!selected) showInfo(); else refreshInfoLight(); }
+function refreshUI(){ if (pending) showPlace(); renderRes(); updateBadge(); $('dayLbl').textContent = `Jour ${day}`; if (!selected) showInfo(); else refreshInfoLight(); }
 function renderRes(){
   const cap = capOf();
   const chips = [['pop', `${Math.floor(pop)}/${cap}`], ['riz', Math.floor(res.riz)], ['bois', Math.floor(res.bois)]];
@@ -2926,13 +2955,27 @@ function updateTools(){
   const pill = $('pill');
   if (tool==='look'){ pill.hidden = true; return; }
   const d = toolDef(tool);
-  const c = tool==='ameliorer' ? 'touchez un bâtiment, un chemin ou un rempart' : tool==='rempart' ? `${costTxt(d.cost)} · sur un chemin : porte` : tool==='tour' ? `${costTxt(d.cost)} · vue ${TOUR_LV[0].see} cases` : tool==='defricher' ? 'touchez une forêt' : tool==='canal' ? `${costTxt(d.cost)} · à côté de l’eau` : tool==='demolir' ? 'touchez un bâtiment' : d.w ? `${d.w}×${d.h} · lancer le chantier`
+  const c = tool==='ameliorer' ? 'touchez un bâtiment, un chemin ou un rempart' : tool==='rempart' ? `${costTxt(d.cost)} · sur un chemin : porte` : tool==='tour' ? `${costTxt(d.cost)} · vue ${TOUR_LV[0].see} cases` : tool==='defricher' ? 'touchez une forêt' : tool==='canal' ? `${costTxt(d.cost)} · à côté de l’eau` : tool==='demolir' ? 'touchez un bâtiment' : d.w ? `${d.w}×${d.h} · touchez l’emplacement, puis validez`
     : tool==='pont' ? (bridgeStart ? 'touchez l’autre rive' : `${costTxt(d.cost)} par case · touchez une rive`) : costTxt(d.cost);
   pill.innerHTML = `<span class="k">${d.k}</span><span>${d.name}</span><span class="c">${c}</span><button type="button" aria-label="Arrêter">✕</button>`;
   pill.hidden = false;
   pill.querySelector('button').onclick = ()=>setTool('look');
 }
-function setTool(id){ tool=id; bridgeStart=null; if (id!=='look'){ selected=null; villageOpen=false; resSel=null; showInfo(); renderRes(); } updateTools(); dirty=true; }
+
+/* ---------- Grands bâtiments : on choisit l'emplacement, puis on valide ---------- */
+let pending = null;
+function showPlace(){
+  const el=$('place');
+  if (!pending || !isBig(tool)){ el.hidden=true; return; }
+  const d=B[tool], c=canBuild(tool,pending);
+  el.innerHTML = `<div class="k">${d.k}</div><div class="t"><b>${d.name}</b><span class="${c.ok?'':'bad'}">${c.ok?`${d.w}×${d.h} cases · ${costTxt(d.cost)} · chantier ${d.days} j`:c.why}</span></div>
+    <div class="hint">Touchez une autre case pour déplacer l’emplacement.</div>
+    <div class="bt"><button class="no" type="button" id="plNo">Annuler</button><button class="ok" type="button" id="plOk" ${c.ok?'':'disabled'}>Valider l’emplacement</button></div>`;
+  el.hidden=false;
+  $('plNo').onclick = ()=>{ pending=null; showPlace(); dirty=true; };
+  $('plOk').onclick = ()=>{ const t=pending; pending=null; showPlace(); if (act(tool,t)) setTool('look'); dirty=true; };
+}
+function setTool(id){ tool=id; bridgeStart=null; pending=null; showPlace(); if (id!=='look'){ selected=null; villageOpen=false; resSel=null; showInfo(); renderRes(); } updateTools(); dirty=true; }
 function setPalette(open){ paletteOpen=open; $('tools').hidden=!open; $('buildBtn').setAttribute('aria-expanded',open); if(open){ setMenu(false); requestAnimationFrame(syncToolBar); } }
 // Barre de défilement du menu, toujours visible (Safari sur iPhone masque les barres natives) ; on peut la faire glisser
 function syncToolBar(){
@@ -3282,6 +3325,7 @@ function endPtr(e,cancel){
           else { bridgeStart=t; updateTools(); }
         } else { const a=bridgeStart; bridgeStart=null; if (a===t) act('pont',t); else buildSpan(a,t); updateTools(); }
       }
+      else if (isBig(tool)){ pending=t; hover=t; showPlace(); }
       else if (tool!=='look') act(tool,t);
       else { const r = tiles[rootOf(I(t.x,t.y))]; selected = (selected===r) ? null : r; villageOpen=false; if (selected && resSel){ resSel=null; renderRes(); } showInfo(); }
       dirty=true;
@@ -3305,6 +3349,7 @@ cv.addEventListener('wheel',e=>{ e.preventDefault();
   zoomAt(e.clientX,e.clientY, e.deltaY<0?1.12:.89); },{passive:false});
 addEventListener('keydown',e=>{
   if (e.target.closest && e.target.closest('input,textarea')) return;
+  if (e.key==='Enter' && pending && !$('place').hidden){ e.preventDefault(); $('plOk').click(); return; }
   if (e.key==='Escape'){ setPalette(false); setMenu(false); setTool('look'); selected=null; villageOpen=false; showInfo(); }
   if (e.key==='q'||e.key==='Q') rotate(-1);
   if (e.key==='e'||e.key==='E') rotate(1);
@@ -3358,7 +3403,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
 });
-const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 16'; }).observe(vl,{childList:true}), vl.textContent += ' · version 16';
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 17'; }).observe(vl,{childList:true}), vl.textContent += ' · version 17';
 </script>
 </body>
 </html>

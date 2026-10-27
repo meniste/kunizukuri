@@ -13,7 +13,7 @@ Page de travail sur claude.ai : https://claude.ai/artifact/CLhV2JWH68gFYdVze4YpM
 2. Incrémenter le numéro partout : `VERSION` dans `sw.js` **et** le libellé `· version N` dans `index.html` (script en bas de page, visible dans le menu 国).
 3. Commit sur `main` (GitHub Pages publie `main` / racine). Le téléphone récupère la version à la prochaine ouverture avec réseau et se recharge seul.
 4. Republier aussi la page claude.ai (sans le bloc service worker / manifest).
-Version actuelle : **16**.
+Version actuelle : **17**.
 
 ## État du jeu
 - Carte procédurale 96×96 (graine), relief jusqu'à 50 niveaux, rivières qui suivent le courant, mer en bordure, 5 essences de forêt, 18 filons dans des parois de montagne (mines en façade).
@@ -31,6 +31,7 @@ Version actuelle : **16**.
 - Poste de garde détaillé (v13, `drawGuardD`, branché via `STORES.garde` → `drawGrand`/`blitBig`) : enceinte de murs blancs `hdobei`, porte `guardGate`, baraquement `nagaya`, tour de pierre (`TOWERS[1]` décalée), corps de garde `banshoHouse` et outils de capture `capTools`, cour d'entraînement (makiwara, cible `mato`, râtelier d'arcs), seaux à incendie, bannières.
 - Fiche ressource (v14) : toucher un compteur du haut (`data-k`, variable `resSel`) ouvre `resInfoHTML(k)` dans le panneau : stock / place, prévision (plein ou épuisé dans N jours), production et consommation du jour par source (`resFlow`), répartition du stock réserve → maisons → entrepôts (`resPlaces`). Fiches spéciales pour 人 (habitants, logement) et 兵 (soldats, postes).
 - Menu de construction (v15) : `.tools` contient `.tlist` (liste qui défile) et `.tsb` (barre de défilement dessinée, toujours visible, glissable : `syncToolBar`, `setupToolScroll`), hauteur max 62 % de l'écran.
+- Placement des grands bâtiments (v17) : toucher la carte avec un outil `isBig` pose un emplacement `pending` (emprise verte ou rouge) et ouvre la barre `#place` (`showPlace`) : Annuler / Valider l’emplacement ; toucher ailleurs déplace l’emplacement ; Entrée valide au clavier.
 - Sauvegarde : `localStorage` clé `kunizukuri5`.
 
 ## Pistes suivantes évoquées
