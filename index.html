@@ -205,7 +205,7 @@ const B = {
   mine:     { k:'鉱', name:'Mine',             era:2, cost:{bois:15}, workers:3, prod:{pierre:4}, hint:'Dans une paroi marquée de filons, reliée par chemin' },
   machiya:  { k:'町', name:'Maison améliorée', era:2, cost:{bois:20,riz:15}, cap:8,            hint:'Remplace une maison, loge 8' },
   armurerie:{ k:'鍛', name:'Armurerie',        era:2, cost:{bois:40,pierre:30}, workers:3, crew:3, days:3, w:2, h:2, road:true, hint:'2×2 cases · forge 1 刀 par jour avec 2 鉄 et 1 木 · reliée par un chemin' },
-  tour:     { k:'櫓', name:'Tour de guet',     era:2, cost:{bois:20}, mil:true, road:true, hint:'2 soldats armés · étend vos terres sur 6 cases · reliée par un chemin' },
+  tour:     { k:'櫓', name:'Tour de guet',     era:2, cost:{bois:20}, mil:true, road:true, hint:'Découvre la carte sur 11 cases dès sa construction · armée de 2 soldats et reliée par un chemin, étend vos terres sur 6 cases' },
   rempart:  { k:'塁', name:'Rempart',          era:2, cost:{bois:3}, hint:'Case par case · renforce les postes proches · une enceinte fermée protège ce qu’elle entoure' },
   porte:    { k:'門', name:'Porte',            era:2, cost:{bois:10,pierre:4}, hint:'Rempart posé sur un chemin : on passe' },
   temple:   { k:'寺', name:'Temple',          era:3, cost:{bois:260,pierre:180}, workers:4, crew:6, days:8, w:5, h:7, hint:'5×7 cases · +2 places dans les maisons à 10 cases' },
@@ -217,7 +217,6 @@ const MINE_LV = [
   { name:'Galerie étayée',      workers:5, mult:2.2, cost:{bois:30,pierre:20} },
   { name:'Portail de pierre',   workers:7, mult:3.8, cost:{bois:40,pierre:45,tetsu:15} }
 ];
-const EXPLORER = { k:'斥', name:'Explorateur', cost:{riz:10}, era:1, hint:'Touchez un lieu à découvrir', step:7, max:3 };
 // Niveaux de chemin : la qualité de la route qui dessert une mine augmente ce qu'elle peut sortir chaque jour
 const ROAD_LV = [
   { name:'Chemin de terre',  k:'道', mine:1 },
@@ -226,9 +225,9 @@ const ROAD_LV = [
 ];
 // Armée : tours de guet, remparts, armurerie
 const TOUR_LV = [
-  { name:'Tour de guet',    k:'櫓', soldiers:2, r:6 },
-  { name:'Tour de pierre',  k:'櫓', soldiers:3, r:8,  cost:{pierre:25,bois:10} },
-  { name:'Yagura à étages', k:'櫓', soldiers:4, r:11, cost:{pierre:40,bois:20,tetsu:10} }
+  { name:'Tour de guet',    k:'櫓', soldiers:2, r:6,  see:11 },
+  { name:'Tour de pierre',  k:'櫓', soldiers:3, r:8,  see:15, cost:{pierre:25,bois:10} },
+  { name:'Yagura à étages', k:'櫓', soldiers:4, r:11, see:20, cost:{pierre:40,bois:20,tetsu:10} }
 ];
 const WALL_LV = [
   { name:'Palissade',         k:'柵', pts:1 },
@@ -412,7 +411,6 @@ function revealAround(cx,cy,r){
 let res, pop, era, day=1, tool='look', hover=null, selected=null;
 let bld = new Map();            // index → { type, lvl, state }
 let net = new Set();
-let explorers = [], exSent = 0;  // { path:[idx], pos, from, to, rev }
 let dirty = true;
 const floaters = [];
 const isHouse = b => b && (b.type==='maison'||b.type==='machiya');
@@ -428,7 +426,7 @@ function save(){
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({ seed, res, pop, era, day, rot, paused, speed,
       b:[...bld].map(([i,b])=>[i,b.type,lvlOf(b),b.build?b.build.got:0,b.arms||0]), cleared: tiles.filter(t=>t.cleared).map(t=>I(t.x,t.y)), canals: tiles.filter(t=>t.canal).map(t=>[I(t.x,t.y),t.src,t.h,t.h0]),
-      seen: packSeen(), ex: explorers.map(e=>[e.path,e.pos]), exSent }));
+      seen: packSeen() }));
   } catch(e){}
 }
 function load(){ try { const d = JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); if (d&&d.seed) return d; } catch(e){} return null; }
@@ -533,13 +531,7 @@ function upCost(b){
 }
 function canBuild(tl,t){
   const i = I(t.x,t.y), b = bld.get(i);
-  if (tl==='explorer'){
-    if (explorers.length>=EXPLORER.max) return {ok:false,why:`Déjà ${EXPLORER.max} explorateurs en route.`};
-    if (Math.hypot(t.x-home.x,t.y-home.y)<4) return {ok:false,why:'Choisissez un lieu plus lointain.'};
-    if (!afford(EXPLORER.cost)) return {ok:false,why:`Il faut ${costTxt(EXPLORER.cost)}.`};
-    return {ok:true};
-  }
-  if (!seen[i]) return {ok:false,why:'Terre inconnue : envoyez un explorateur.'};
+  if (!seen[i]) return {ok:false,why:'Terre inconnue : construisez une tour de guet à proximité pour la découvrir.'};
   if (tl==='defricher'){
     if (!terr[i]) return {ok:false,why:'Hors de vos terres.'};
     return clearZone(t).length ? {ok:true} : {ok:false,why:'Pas de forêt à raser ici.'};
@@ -593,14 +585,7 @@ function linePath(a,b){
 function act(tl,t){
   const c = canBuild(tl,t); if (!c.ok){ toast(c.why); return false; }
   const i = I(t.x,t.y);
-  if (tl==='explorer'){
-    pay(EXPLORER.cost);
-    const path = linePath(home,t);
-    explorers.push({ path, pos:0, from:0, to:0, rev:0 }); exSent++;
-    const days = Math.ceil((path.length-1)/EXPLORER.step);
-    toast(`Un explorateur part. Arrivée dans ${days} jour${days>1?'s':''}.`);
-  }
-  else if (tl==='defricher'){
+  if (tl==='defricher'){
     const z = clearZone(t), now=performance.now();
     for (const f of z){ f.forest=false; f.cleared=true; paint(f); const [x,y]=pos(f); if (floaters.length<90) floaters.push({x,y,txt:'+3木',c:RES.bois.color,t0:now+Math.random()*300}); }
     res.bois += 3*z.length; toast(`${z.length} parcelle${z.length>1?'s':''} défrichée${z.length>1?'s':''} : +${3*z.length} 木`);
@@ -620,7 +605,7 @@ function act(tl,t){
     const b = bld.get(rootOf(i)); pay(upCost(b));
     if (b.type==='maison'){ b.type='machiya'; toast('Maison améliorée : 8 places'); }
     else if (b.type==='chemin'){ b.lvl = lvlOf(b)+1; toast(`${ROAD_LV[b.lvl-1].name}`); }
-    else if (b.type==='tour'){ b.lvl = lvlOf(b)+1; const L=TOUR_LV[b.lvl-1]; toast(`${L.name} : ${L.soldiers} soldats, terres sur ${L.r} cases`); }
+    else if (b.type==='tour'){ b.lvl = lvlOf(b)+1; const L=TOUR_LV[b.lvl-1]; const nr=towerReveal(rootOf(i)); toast(`${L.name} : vue sur ${L.see} cases${nr?` (+${nr} découvertes)`:''}, ${L.soldiers} soldats`); }
     else if (b.type==='rempart'){ b.lvl = lvlOf(b)+1; toast(WALL_LV[b.lvl-1].name); }
     else if (b.type==='armurerie'){ b.lvl = 2; toast(`${ARM_LV[1].name} : ${ARM_LV[1].out} 刀 par jour, ${ARM_LV[1].workers} forgerons`); }
     else { b.lvl = lvlOf(b)+1; const L=MINE_LV[b.lvl-1]; toast(`Mine niveau ${b.lvl} · ${L.name} : production ×${L.mult}`); }
@@ -634,6 +619,7 @@ function act(tl,t){
   else if (tl==='rempart' && c.gate){ pay(B.porte.cost); const g=bld.get(i); g.type='porte'; g.lvl=1; toast('Porte percée dans le rempart'); }
   else {
     pay(B[tl].cost); bld.set(i,{type:tl,lvl:1,state:'ok'});
+    if (tl==='tour') towerReveal(i, true);
     if (t.forest){ t.forest=false; t.cleared=true; paint(t); }
   }
   allocate(); refreshUI(); save(); dirty=true; return true;
@@ -708,33 +694,18 @@ function runDay(){
     if (hs.length){ const [sx,sy]=pos(tiles[hs[(Math.random()*hs.length)|0][0]]); floaters.push({x:sx,y:sy-8,txt:`+${g} 人`,c:'#fff8e8',t0:now}); }
   }
   for (const [i,b] of bld){ if (!b.build) continue; advanceSite(i,b,now); }
-  for (const e of explorers){ e.from = e.pos; e.to = Math.min(e.path.length-1, e.pos + EXPLORER.step); }
-  exAnim = { t0: now };
   day++;
   if (era<2 && pop>=ERA2_POP){ era=2; setTimeout(()=>toast('Nouvelle ère : chemins, ponts, mines, armurerie, tours de guet et remparts'),1200); buildTools(); }
   if (era===2 && pop>=ERA3_POP){ era=3; setTimeout(()=>toast('Ère III : temples, postes de garde et château'),1200); buildTools(); }
   allocate(); refreshUI(); save(); dirty=true;
 }
-let exAnim = null;
-function stepExplorers(now){
-  if (!explorers.length){ exAnim=null; return false; }
-  const f = !exAnim || reduce ? 1 : clamp((now-exAnim.t0)/1800,0,1);
-  let moving = false;
-  for (const e of explorers){
-    const cur = e.from + (e.to-e.from)*f;
-    while (e.rev <= Math.floor(cur)){ const t=tiles[e.path[e.rev]]; revealAround(t.x,t.y,5); e.rev++; }
-    e.pos = f>=1 ? e.to : e.pos; e.cur = cur;
-    if (f<1) moving = true;
-  }
-  if (f>=1){
-    const arrived = explorers.filter(e=>e.pos>=e.path.length-1);
-    for (const e of arrived){ const t=tiles[e.path[e.path.length-1]]; revealAround(t.x,t.y,7); }
-    if (arrived.length){ explorers = explorers.filter(e=>!arrived.includes(e)); toast(arrived.length>1?'Des explorateurs sont arrivés : nouvelles terres cartographiées.':'L’explorateur est arrivé : nouvelles terres cartographiées.'); save(); }
-    exAnim = null;
-  }
-  return moving;
+// Tours de guet : leurs guetteurs cartographient tout ce qui est à portée de vue, dès la construction
+function towerReveal(i, announce=false){
+  const b=bld.get(i), t=tiles[i]; if (!b || b.type!=='tour') return 0;
+  const n = revealAround(t.x, t.y, TOUR_LV[lvlOf(b)-1].see);
+  if (announce) setTimeout(()=>toast(n ? `Depuis la tour, les guetteurs découvrent ${n} parcelles.` : 'Tour de guet construite : rien de nouveau à l’horizon.'),200);
+  return n;
 }
-
 /* ---------- Vue : rotation et projection ---------- */
 let rot = 0;
 const rotXY = (x,y) => rot===0?[x,y]: rot===1?[N-1-y,x]: rot===2?[N-1-x,N-1-y]: [y,N-1-x];
@@ -1723,14 +1694,6 @@ function drawBuilding(b,t,sx,sy){
   }
   if (workersOf(b) && b.state!=='ok') badgeAt(sx+7,sy-17);
 }
-function drawExplorer(sx,sy,tm){
-  const bob = reduce?0:Math.sin(tm*8)*.6;
-  ctx.fillStyle='rgba(20,16,12,.3)'; ctx.beginPath(); ctx.ellipse(sx,sy+1,4,1.8,0,0,7); ctx.fill();
-  poly([sx-3,sy, sx+3,sy, sx+1.2,sy-8+bob, sx-1.2,sy-8+bob],'#2f4a6b');
-  ctx.fillStyle='#e3c9a0'; ctx.beginPath(); ctx.arc(sx,sy-9.5+bob,1.7,0,7); ctx.fill();
-  ctx.fillStyle='#c9a55a'; ctx.beginPath(); ctx.moveTo(sx-5,sy-10+bob); ctx.lineTo(sx,sy-13.5+bob); ctx.lineTo(sx+5,sy-10+bob); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle='#5a3a20'; ctx.lineWidth=.8; ctx.beginPath(); ctx.moveTo(sx+3.5,sy+1); ctx.lineTo(sx+4.5,sy-11); ctx.stroke();
-}
 
 /* ---------- Grands bâtiments sur plusieurs cases ---------- */
 // L'emprise part de la case touchée (centrée pour le château) dans le repère de la carte.
@@ -1777,7 +1740,7 @@ function recomputeTerr(){
     const {cx,cy,r} = guardOf(i,b);
     for (let y=Math.max(0,Math.floor(cy-r));y<=Math.min(N-1,Math.ceil(cy+r));y++) for (let x=Math.max(0,Math.floor(cx-r));x<=Math.min(N-1,Math.ceil(cx+r));x++)
       if (Math.hypot(x-cx,y-cy)<=r) nt[I(x,y)]=1;
-    if (b.type==='tour') revealAround(cx,cy,r+2); }
+    if (b.type==='tour') revealAround(cx,cy,r+1); }
   let changed=false; for (let k=0;k<nt.length;k++) if (nt[k]!==terr[k]){ changed=true; break; }
   if (changed){ const before = terr.reduce((a,v)=>a+v,0), after = nt.reduce((a,v)=>a+v,0); terr = nt; dirty=true;
     if (after>before && day>1) setTimeout(()=>toast(`Vos terres s’agrandissent : +${after-before} parcelles gardées.`),300);
@@ -2467,8 +2430,7 @@ function drawDawn(now){
 function render(now){
   const tm = now/1000;
   tickClock(now);
-  const moving = stepExplorers(now);
-  const busy = dirty || dayAnim || floaters.length || moving || rotFade;
+  const busy = dirty || dayAnim || floaters.length || rotFade;
   if (busy){ dirty=false; draw(now,tm); }
   requestAnimationFrame(render);
 }
@@ -2487,10 +2449,8 @@ function draw(now,tm){
   if (tool==='pont' && bridgeStart){ fpSet.add(bridgeStart); if (hover && (hover.x===bridgeStart.x || hover.y===bridgeStart.y)){ const n=Math.max(Math.abs(hover.x-bridgeStart.x),Math.abs(hover.y-bridgeStart.y)); for (let k=0;k<=n;k++) fpSet.add(at(bridgeStart.x+Math.sign(hover.x-bridgeStart.x)*k, bridgeStart.y+Math.sign(hover.y-bridgeStart.y)*k)); } }
   const selSet = new Set(); if (selected){ const r=rootOf(I(selected.x,selected.y)); if (occ.has(r)) for (const f of bigTiles(r)) selSet.add(f); }
   let zone = null;                                // zone d'un poste : en aperçu (outil tour) ou sélectionné
-  if (tool==='tour' && hover && prev && prev.ok) zone = { cx:hover.x, cy:hover.y, r:TOUR_LV[0].r };
-  else if (selected){ const si=I(selected.x,selected.y), sb=bld.get(si); if (sb && B[sb.type].mil && !sb.build) zone = guardOf(si,sb); }
-  const exAt = new Map();
-  for (const e of explorers){ const c = e.cur ?? e.pos, k = Math.min(e.path.length-1, Math.round(c)); exAt.set(e.path[k], e); }
+  if (tool==='tour' && hover && prev && prev.ok) zone = { cx:hover.x, cy:hover.y, r:TOUR_LV[0].r, see:TOUR_LV[0].see };
+  else if (selected){ const si=I(selected.x,selected.y), sb=bld.get(si); if (sb && B[sb.type].mil && !sb.build){ zone = guardOf(si,sb); if (sb.type==='tour') zone.see = TOUR_LV[lvlOf(sb)-1].see; } }
 
   for (let s=0; s<2*N-1; s++){
     for (let u=Math.max(0,s-N+1); u<=Math.min(s,N-1); u++){
@@ -2503,7 +2463,9 @@ function draw(now,tm){
       let edge = false;
       for (const [dx,dy] of NB){ const n=at(x+dx,y+dy); if (n && !seen[I(n.x,n.y)]) { edge=true; break; } }
       if (edge){ diamond(sx,sy); ctx.fillStyle='rgba(231,219,192,.5)'; ctx.fill(); }
-      if (zone && Math.hypot(x-zone.cx,y-zone.cy)<=zone.r){ diamond(sx,sy); ctx.fillStyle='rgba(255,232,160,.24)'; ctx.fill(); }
+      if (zone){ const dz=Math.hypot(x-zone.cx,y-zone.cy);
+        if (dz<=zone.r){ diamond(sx,sy); ctx.fillStyle='rgba(255,232,160,.24)'; ctx.fill(); }
+        else if (zone.see && dz<=zone.see){ diamond(sx,sy); ctx.fillStyle='rgba(170,205,230,.16)'; ctx.fill(); } }
       if (encl[i] && terr[i]){ diamond(sx,sy); ctx.fillStyle='rgba(255,246,220,.16)'; ctx.fill(); }
       if (!terr[i]){ diamond(sx,sy); ctx.fillStyle='rgba(60,48,30,.16)'; ctx.fill(); }
       else {
@@ -2529,7 +2491,6 @@ function draw(now,tm){
         const oi = access.get(i), ot = tiles[oi], of = faceOf(ot), ob = bld.get(oi);
         if (of && seen[oi]){ if (ob) drawMine(ot,of,lvlOf(ob),ob.state); else oreMarks(ot,of); }
       }
-      if (exAt.has(i)) drawExplorer(sx,sy,tm);
     }
   }
   for (let k=floaters.length-1;k>=0;k--){
@@ -2576,15 +2537,15 @@ function renderRes(){
   if (res.armes>0 || [...bld.values()].some(b=>b.type==='armurerie')) chips.push(['armes', Math.floor(res.armes||0)]);
   $('res').innerHTML = chips.map(([k,v])=>`<div class="chip${k==='riz'&&rizRate<0?' warn':''}" title="${RES[k].name}${k==='riz'?` (${rizRate>=0?'+':''}${rizRate.toFixed(1)} par jour)`:''}"><b style="background:${RES[k].color}">${RES[k].k}</b>${v}</div>`).join('');
 }
-const TOOL_LIST = ['riziere','maison','bucheron','defricher','canal','explorer','chemin','pont','mine','ameliorer','armurerie','tour','rempart','temple','garde','chateau','demolir'];
+const TOOL_LIST = ['riziere','maison','bucheron','defricher','canal','chemin','pont','mine','ameliorer','armurerie','tour','rempart','temple','garde','chateau','demolir'];
 const DEFRICHER = { k:'伐', name:'Défricher', era:1, cost:null, hint:'Rase la forêt case par case · +3 木 par case' };
 const CANAL = { k:'渠', name:'Canal', era:1, cost:{bois:3}, hint:'Prolonge une rivière ou un canal d’une case' };
 const toolDef = id => id==='ameliorer' ? {k:'改',name:'Améliorer',cost:B.machiya.cost,era:2}
-  : id==='demolir' ? {k:'壊',name:'Démolir',cost:null,era:1} : id==='explorer' ? EXPLORER : id==='defricher' ? DEFRICHER : id==='canal' ? CANAL : B[id];
+  : id==='demolir' ? {k:'壊',name:'Démolir',cost:null,era:1} : id==='defricher' ? DEFRICHER : id==='canal' ? CANAL : B[id];
 let paletteOpen=false, villageOpen=false;
 function buildTools(){
   const items = TOOL_LIST.filter(id=>era>=toolDef(id).era);
-  const next = era<2 ? `À ${ERA2_POP} habitants : chemins, ponts, mines, armurerie, tours et remparts.` : era<3 ? `À ${ERA3_POP} habitants : temple, poste de garde, château.` : 'Bientôt : maison de santé.';
+  const next = era<2 ? `À ${ERA2_POP} habitants : tours de guet pour découvrir la province, chemins, ponts, mines, armurerie et remparts.` : era<3 ? `À ${ERA3_POP} habitants : temple, poste de garde, château.` : 'Bientôt : maison de santé.';
   $('tools').innerHTML = items.map(id=>{ const d=toolDef(id);
     const c = id==='ameliorer' ? 'maison, mine, chemin, tour, rempart' : id==='rempart' ? `${costTxt(d.cost)} la case` : id==='defricher' ? '1 case · +3 木' : d.w ? `${d.w}×${d.h} · chantier ${d.days} j` : d.cost ? costTxt(d.cost) : '';
     return `<button class="tool" data-tool="${id}" aria-pressed="${tool===id}" type="button" title="${d.hint||''}"><span class="k">${d.k}</span><span class="l">${d.name}</span><span class="c">${c}</span></button>`;
@@ -2597,8 +2558,8 @@ function updateTools(){
   const pill = $('pill');
   if (tool==='look'){ pill.hidden = true; return; }
   const d = toolDef(tool);
-  const c = tool==='ameliorer' ? 'touchez un bâtiment, un chemin ou un rempart' : tool==='rempart' ? `${costTxt(d.cost)} · sur un chemin : porte` : tool==='tour' ? `${costTxt(d.cost)} · reliée par un chemin` : tool==='defricher' ? 'touchez une forêt' : tool==='canal' ? `${costTxt(d.cost)} · à côté de l’eau` : tool==='demolir' ? 'touchez un bâtiment' : d.w ? `${d.w}×${d.h} · lancer le chantier`
-    : tool==='explorer' ? `${costTxt(d.cost)} · touchez la destination` : tool==='pont' ? (bridgeStart ? 'touchez l’autre rive' : `${costTxt(d.cost)} par case · touchez une rive`) : costTxt(d.cost);
+  const c = tool==='ameliorer' ? 'touchez un bâtiment, un chemin ou un rempart' : tool==='rempart' ? `${costTxt(d.cost)} · sur un chemin : porte` : tool==='tour' ? `${costTxt(d.cost)} · vue ${TOUR_LV[0].see} cases` : tool==='defricher' ? 'touchez une forêt' : tool==='canal' ? `${costTxt(d.cost)} · à côté de l’eau` : tool==='demolir' ? 'touchez un bâtiment' : d.w ? `${d.w}×${d.h} · lancer le chantier`
+    : tool==='pont' ? (bridgeStart ? 'touchez l’autre rive' : `${costTxt(d.cost)} par case · touchez une rive`) : costTxt(d.cost);
   pill.innerHTML = `<span class="k">${d.k}</span><span>${d.name}</span><span class="c">${c}</span><button type="button" aria-label="Arrêter">✕</button>`;
   pill.hidden = false;
   pill.querySelector('button').onclick = ()=>setTool('look');
@@ -2616,7 +2577,7 @@ function goalsHTML(){
   const g1 = [
     [n('riziere')>=2, 'Cultiver 2 rizières', `${Math.min(2,n('riziere'))}/2`],
     [n('bucheron')>=1, 'Installer un bûcheron', ''],
-    [exSent>0, 'Envoyer un explorateur', ''],
+    [tiles.some(t=>t.cleared), 'Défricher une parcelle de forêt', ''],
     [pop>=ERA2_POP, `Atteindre ${ERA2_POP} habitants`, `${Math.floor(pop)}/${ERA2_POP}`]
   ];
   const g2 = [
@@ -2636,7 +2597,7 @@ function goalsHTML(){
   const G = era<2?g1:era<3?g2:g3; goalsLeft = G.filter(g=>!g[0]).length;
   const list = G.map(([d,l,p])=>`<li><span class="m">${d?'✓':'・'}</span><span class="${d?'done':''}">${l} ${p&&!d?`<small>(${p})</small>`:''}</span></li>`).join('');
   return `<div class="era">${['','Ère I · Le village','Ère II · Vers les montagnes','Ère III · Le domaine'][era]}</div><ul class="goals">${list}</ul>
-    <p>${era<2?'Ensuite : chemins, ponts, mines, armurerie, tours de guet et remparts.':era<3?`Tours de guet armées et reliées par la route : elles étendent vos terres ; les remparts proches les renforcent. À ${ERA3_POP} habitants : temples, postes de garde et château pour agrandir et protéger vos terres.`:'Les soldats doivent rester armés, en poste et reliés par la route : sans eux, les terres qu’ils protègent ne sont plus à vous.'}</p>`;
+    <p>${era<2?'Ensuite : tours de guet pour découvrir la province, chemins, ponts, mines, armurerie et remparts.':era<3?`Tours de guet armées et reliées par la route : elles étendent vos terres ; les remparts proches les renforcent. À ${ERA3_POP} habitants : temples, postes de garde et château pour agrandir et protéger vos terres.`:'Les soldats doivent rester armés, en poste et reliés par la route : sans eux, les terres qu’ils protègent ne sont plus à vous.'}</p>`;
 }
 const STATE = { site:['ok','Chantier en cours'], wait:['bad','Chantier en attente de matériaux'], ok:['ok','En activité'], bras:['bad','Manque de bras'], route:['bad','Pas de chemin relié au village devant l’entrée'],
   route2:['bad','Pas relié au village par un chemin'], armes:['bad','Soldats sans armes : forgez des 刀'], fer:['bad','Manque de fer (2 鉄) ou de bois'] };
@@ -2656,7 +2617,7 @@ function showInfo(){
   if (!selected){
     const pct = Math.round(seen.reduce((a,v)=>a+v,0)/(N*N)*100);
     el.innerHTML = `<button class="close" id="closeInfo" aria-label="Fermer" type="button">×</button><header><div class="bigk">村</div><div><h2>Votre village</h2><div class="coord">Jour ${day} · ${Math.floor(pop)} habitants · ${used} au travail</div></div></header>
-      <dl><dt>Riz par jour</dt><dd>${rizRate>=0?'+':''}${rizRate.toFixed(1)} 米</dd>${armyRows()}<dt>Province découverte</dt><dd>${pct} %</dd><dt>Explorateurs en route</dt><dd>${explorers.length}</dd></dl>
+      <dl><dt>Riz par jour</dt><dd>${rizRate>=0?'+':''}${rizRate.toFixed(1)} 米</dd>${armyRows()}<dt>Province découverte</dt><dd>${pct} %</dd><dt>Tours de guet</dt><dd>${[...bld.values()].filter(b=>b.type==='tour').length}</dd></dl>
       ${goalsHTML()}`;
     $('closeInfo').onclick = ()=>{ villageOpen=false; showInfo(); };
     lastInfoKey=''; return;
@@ -2683,8 +2644,9 @@ function showInfo(){
       rows += `<dt>Armés</dt><dd>${Math.min(b.arms||0,workersOf(b))} / ${workersOf(b)} 刀</dd>`;
       rows += `<dt>Protège</dt><dd>${g.r} cases autour${b.state==='ok'?'':' — inactif'}</dd>`;
       rows += `<dt>Remparts proches</dt><dd>${g.bonus ? `+${g.bonus} case${g.bonus>1?'s':''}` : '—'}${g.bonus<g.cap ? ` (${g.pts%WALL_PER_STEP}/${WALL_PER_STEP} pour la suivante)` : ' · maximum'}</dd>`; }
+    if (b.type==='tour') rows += `<dt>Vue</dt><dd>${TOUR_LV[lv-1].see} cases autour, même sans soldats</dd>`;
     if (b.type==='tour' && lv<TOUR_LV.length){ const nx=TOUR_LV[lv];
-      rows += `<dt>${nx.name}</dt><dd>${nx.soldiers} soldats, ${nx.r} cases</dd>`;
+      rows += `<dt>${nx.name}</dt><dd>vue ${nx.see} · ${nx.soldiers} soldats, ${nx.r} cases</dd>`;
       acts += `<button class="act" id="aUp" type="button" ${canBuild('ameliorer',t).ok?'':'disabled'}>Élever · ${costTxt(nx.cost)}</button>`; }
     if (b.type==='armurerie' && !b.build){ const A=ARM_LV[lv-1];
       rows += `<dt>Par jour</dt><dd>${2*A.out} 鉄 + ${A.out} 木 → ${A.out} 刀</dd><dt>En réserve</dt><dd>${Math.floor(res.armes||0)} 刀</dd>`;
@@ -2814,14 +2776,14 @@ cv.addEventListener('pointermove',e=>{
     }
   }
   if (e.pointerType==='mouse' && !(drag&&drag.moved)){
-    const h = pick(e.clientX,e.clientY) || (tool==='explorer' ? pickGround(e.clientX,e.clientY) : null);
+    const h = pick(e.clientX,e.clientY);
     if (h!==hover){ hover=h; dirty=true; }
   }
 });
 function endPtr(e,cancel){
   if (!ptrs.has(e.pointerId)) return;
   if (!cancel && ptrs.size===1 && drag && !drag.moved && !dayAnim){
-    const t = pick(e.clientX,e.clientY) || (tool==='explorer' ? pickGround(e.clientX,e.clientY) : null);
+    const t = pick(e.clientX,e.clientY);
     setPalette(false); setMenu(false);
     if (t){
       if (e.pointerType!=='mouse') hover=t;
@@ -2831,7 +2793,7 @@ function endPtr(e,cancel){
           else { bridgeStart=t; updateTools(); }
         } else { const a=bridgeStart; bridgeStart=null; if (a===t) act('pont',t); else buildSpan(a,t); updateTools(); }
       }
-      else if (tool!=='look'){ if (act(tool,t) && tool==='explorer') setTool('look'); }
+      else if (tool!=='look') act(tool,t);
       else { const r = tiles[rootOf(I(t.x,t.y))]; selected = (selected===r) ? null : r; villageOpen=false; showInfo(); }
       dirty=true;
     }
@@ -2868,10 +2830,10 @@ addEventListener('resize',resize);
 /* ---------- Démarrage ---------- */
 function start(s, saved){
   generate(s);
-  bld = new Map(); occ = new Map(); explorers = []; exSent = 0; selected=null; hover=null; tool='look'; day=1; rot=0; floaters.length=0; paused=false; speed=0; dayAcc=0;
+  bld = new Map(); occ = new Map(); selected=null; hover=null; tool='look'; day=1; rot=0; floaters.length=0; paused=false; speed=0; dayAcc=0;
   res = { riz:40, bois:35, pierre:0, tetsu:0, dou:0, kin:0, armes:0 }; pop = 5; era = 1; encl = new Uint8Array(N*N); walls = [];
   if (saved){
-    Object.assign(res, saved.res||{}); pop = saved.pop ?? 5; era = saved.era||1; day = saved.day||1; exSent = saved.exSent||0; paused = !!saved.paused; speed = saved.speed||0; rot = saved.rot||0;
+    Object.assign(res, saved.res||{}); pop = saved.pop ?? 5; era = saved.era||1; day = saved.day||1; paused = !!saved.paused; speed = saved.speed||0; rot = saved.rot||0;
     for (const i of saved.cleared||[]) if (tiles[i]){ tiles[i].forest=false; tiles[i].cleared=true; paint(tiles[i]); }
     for (const [i,src,h,h0] of saved.canals||[]) if (tiles[i]){ const t=tiles[i]; t.river=true; t.canal=true; t.src=src; t.h=h; t.h0=h0; }
     if ((saved.canals||[]).length) for (const t of tiles) paint(t);
@@ -2879,7 +2841,6 @@ function start(s, saved){
       o.arms = arms ?? (B[type].mil && !got ? B[type].workers : 0);          // anciennes parties : les gardes déjà en poste sont armés
       bld.set(i,o); if (isBig(type)) registerBig(i); }
     if (saved.seen){ try { const sn = unpackSeen(saved.seen); if (sn.length===N*N) seen = sn; } catch(e){} }
-    for (const [path,p] of saved.ex||[]) explorers.push({path, pos:p, from:p, to:p, rev:p+1});
   } else {
     bld.set(I(home.x,home.y),{type:'maison',lvl:1,state:'ok'});
     const n2 = NB.map(([dx,dy])=>at(home.x+dx,home.y+dy)).find(n=>n&&!n.water&&!n.river&&!n.ore&&!n.forest&&Math.abs(n.h-home.h)<=1);
@@ -2888,6 +2849,7 @@ function start(s, saved){
   }
   $('seedLbl').textContent = 'Province n° '+seed;
   $('compass').textContent = COMPASS[rot];
+  for (const [i,b] of bld) if (b.type==='tour') towerReveal(i);
   fitView(); buildTools(); allocate(); refreshUI(); setSpeed(speed); setPaused(paused); dirty=true;
 }
 resize();
@@ -2905,7 +2867,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
 });
-const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 9'; }).observe(vl,{childList:true}), vl.textContent += ' · version 9';
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 10'; }).observe(vl,{childList:true}), vl.textContent += ' · version 10';
 </script>
 </body>
 </html>

@@ -13,13 +13,13 @@ Page de travail sur claude.ai : https://claude.ai/artifact/CLhV2JWH68gFYdVze4YpM
 2. Incrémenter le numéro partout : `VERSION` dans `sw.js` **et** le libellé `· version N` dans `index.html` (script en bas de page, visible dans le menu 国).
 3. Commit sur `main` (GitHub Pages publie `main` / racine). Le téléphone récupère la version à la prochaine ouverture avec réseau et se recharge seul.
 4. Republier aussi la page claude.ai (sans le bloc service worker / manifest).
-Version actuelle : **9**.
+Version actuelle : **10**.
 
 ## État du jeu
 - Carte procédurale 96×96 (graine), relief jusqu'à 50 niveaux, rivières qui suivent le courant, mer en bordure, 5 essences de forêt, 18 filons dans des parois de montagne (mines en façade).
-- Brouillard + explorateurs ; 4 angles de vue (boutons, Q/E, glisser à deux doigts, clic droit) ; jours automatiques ×1/×2/×3 avec pause, bouton « jour suivant » avec lever de soleil ; fond papier.
+- Brouillard : plus d'explorateurs (retirés en v10) ; ce sont les tours de guet qui découvrent la carte (`towerReveal`, rayon de vue `see` 11/15/20 selon le niveau, dès la construction, sans soldats ni route) ; 4 angles de vue (boutons, Q/E, glisser à deux doigts, clic droit) ; jours automatiques ×1/×2/×3 avec pause, bouton « jour suivant » avec lever de soleil ; fond papier.
 - Ères : I (rizière, maison, bûcheron, défricher case par case, canal) → II à 12 hab. (chemins 3 niveaux terre/pierre/pavé avec marches rondins/ishigaki/torii, ponts sur plusieurs cases d'une rive à l'autre, mines 3 niveaux, maison améliorée) → III à 40 hab. (temple 5×7, poste de garde 3×3, château 9×9 avec jardin, chantiers sur plusieurs jours).
-- Ère II aussi : armurerie 2×2 (2 鉄 + 1 木 → 1 刀 par jour, niveau 2 « Grande forge » ×2), tours de guet 3 niveaux (2/3/4 soldats, rayon 6/8/11), remparts case par case 3 niveaux (palissade / ishigaki / mur blanc couvert) ; rempart posé sur un chemin = porte.
+- Ère II aussi : armurerie 2×2 (2 鉄 + 1 木 → 1 刀 par jour, niveau 2 « Grande forge » ×2), tours de guet 3 niveaux (2/3/4 soldats, terres 6/8/11, vue 11/15/20), remparts case par case 3 niveaux (palissade / ishigaki / mur blanc couvert) ; rempart posé sur un chemin = porte.
 - Armée : tours, postes de garde et château (`mil:true`) ont besoin de soldats (ouvriers) armés d'un 刀 chacun (pris une fois, rendu à la démolition, champ `arms`). Tours, postes de garde et armurerie (`road:true`) doivent toucher le réseau de chemins.
 - Territoire : terres de départ + cercles des postes armés en service ; rayon +1 par 6 points de rempart à portée (palissade 1, ishigaki 2, mur couvert 3, porte 2 ; plafond +3 tour, +4 garde, +6 château).
 - Enceinte : cases inaccessibles depuis le bord de carte sans franchir rempart ou rivière (douves) → +1 place par maison, +1 米 par rizière.
