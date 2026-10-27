@@ -240,8 +240,8 @@ const B = {
   machiya:  { k:'町', name:'Maison améliorée', era:2, cost:{bois:20,riz:15}, cap:8,            hint:'Remplace une maison, loge 8 · range deux fois plus' },
   kura_riz: { k:'倉', name:'Grenier à riz',          era:1, cost:{bois:40},                     crew:2, days:2, w:2, h:2, store:{riz:500}, hint:'2×2 cases · garde 500 米 de plus' },
   kura_bois:{ k:'材', name:'Entrepôt de bois',        era:1, cost:{bois:30},                     crew:2, days:2, w:2, h:2, store:{bois:400}, hint:'2×2 cases · garde 400 木 de plus' },
-  kura_ishi:{ k:'礎', name:'Dépôt de pierre',         era:2, cost:{bois:40,pierre:20},           crew:3, days:2, w:2, h:2, store:{pierre:400}, hint:'2×2 cases · garde 400 石 de plus' },
-  kura_kane:{ k:'蔵', name:'Entrepôt de minerais',    era:2, cost:{bois:50,pierre:40},           crew:3, days:3, w:2, h:2, store:{tetsu:200,dou:150,kin:80}, hint:'2×2 cases · garde 200 鉄, 150 銅 et 80 金 de plus' },
+  kura_ishi:{ k:'礎', name:'Dépôt de pierre',         era:2, cost:{bois:40,pierre:20},           crew:3, days:2, w:2, h:2, store:{pierre:400}, hint:'2×2 cases · garde 400 石 de plus · relié aux mines par la route : pierre ×1,25 à ×1,8' },
+  kura_kane:{ k:'蔵', name:'Entrepôt de minerais',    era:2, cost:{bois:50,pierre:40},           crew:3, days:3, w:2, h:2, store:{tetsu:200,dou:150,kin:80}, hint:'2×2 cases · garde 200 鉄, 150 銅 et 80 金 de plus · relié aux mines par la route : minerai ×1,25 à ×1,8' },
   kura_arme:{ k:'庫', name:'Arsenal',                 era:2, cost:{bois:60,pierre:50,hagane:5},  crew:3, days:3, w:2, h:2, store:{hagane:120,yari:50,armes:50,yoroi:50}, hint:'2×2 cases · garde 120 鋼 et 50 槍 刀 鎧 de plus' },
   forge:    { k:'炉', name:'Forge',            era:2, cost:{bois:25,pierre:20}, workers:3, road:true, hint:'Fond le minerai : 2 鉄 + 2 木 → 1 鋼 (acier) par jour · reliée par un chemin' },
   armurerie:{ k:'武', name:'Armurerie',        era:2, cost:{bois:40,pierre:30}, workers:3, crew:3, days:3, w:2, h:2, road:true, hint:'2×2 cases · forge lances 槍, sabres 刀 et armures 鎧 avec l’acier 鋼 · reliée par un chemin' },
@@ -259,9 +259,9 @@ const MINE_LV = [
 ];
 // Niveaux de chemin : la qualité de la route qui dessert une mine augmente ce qu'elle peut sortir chaque jour
 const ROAD_LV = [
-  { name:'Chemin de terre',  k:'道', mine:1 },
-  { name:'Chemin de pierre', k:'石', mine:1.25, cost:{pierre:4} },
-  { name:'Route pavée',      k:'街', mine:1.5,  cost:{pierre:6,bois:2} }
+  { name:'Chemin de terre',  k:'道', mine:1.25 },
+  { name:'Chemin de pierre', k:'石', mine:1.5, cost:{pierre:4} },
+  { name:'Route pavée',      k:'街', mine:1.8, cost:{pierre:6,bois:2} }
 ];
 // Armée : tours de guet, remparts, armurerie
 const TOUR_LV = [
@@ -504,7 +504,29 @@ function computeNet(){
 const connected = t => t.ore ? net.has(t.acc) : NB.some(([dx,dy])=>{ const n=at(t.x+dx,t.y+dy); return n && net.has(I(n.x,n.y)) && linkOK(t,n); });
 const afford = c => Object.entries(c).every(([k,v])=>res[k]>=v);
 const costTxt = c => Object.entries(c).map(([k,v])=>v+RES[k].k).join(' ');
-const roadBonus = t => { const rb = t.ore && bld.get(t.acc); return rb && rb.type==='chemin' ? ROAD_LV[lvlOf(rb)-1].mine : 1; };
+// Liaison mine → entrepôt : une route continue entre l'entrée d'une mine et un entrepôt qui stocke ce qu'elle extrait
+// (minerais → entrepôt de minerais, pierre → dépôt de pierre) augmente sa production. Le tronçon le plus faible compte ;
+// les ponts et les portes ne limitent pas. linkLv[groupe][case] = niveau de la meilleure route vers un tel entrepôt.
+let linkLv = { kane:null, ishi:null }, linkSig = '';
+const LINK_OF = k => k==='pierre' ? 'ishi' : 'kane';
+function computeMineLinks(){
+  for (const [key,wt] of [['kane','kura_kane'],['ishi','kura_ishi']]){
+    const lv = new Uint8Array(N*N); linkLv[key] = lv;
+    const seeds = [];
+    for (const [i,b] of bld){ if (b.type!==wt || b.build) continue;
+      for (const t of bigTiles(i)) for (const [dx,dy] of NB){ const n=at(t.x+dx,t.y+dy); if (!n) continue; const j=I(n.x,n.y); if (isRoad(bld.get(j)) && linkOK(t,n)) seeds.push(j); } }
+    if (!seeds.length) continue;
+    const rl = j => { const b=bld.get(j); return b.type==='chemin' ? lvlOf(b) : 3; };
+    for (let L=3; L>=1; L--){
+      const seen = new Uint8Array(N*N), q = seeds.filter(j=>rl(j)>=L); for (const j of q) seen[j]=1;
+      while (q.length){ const j=q.pop(); if (!lv[j]) lv[j]=L; const t=tiles[j];
+        for (const [dx,dy] of NB){ const n=at(t.x+dx,t.y+dy); if (!n) continue; const k=I(n.x,n.y); if (seen[k]) continue;
+          if (!isRoad(bld.get(k)) || rl(k)<L || !linkOK(t,n)) continue; seen[k]=1; q.push(k); } } }
+  }
+}
+const mineLinkLv = (t,k) => { if (!t.ore) return 0; const lv=linkLv[LINK_OF(k)]; return lv ? lv[t.acc] : 0; };
+const fr = v => String(v).replace('.',',');
+const mineLink = (t,k) => { const L=mineLinkLv(t,k); return L ? ROAD_LV[L-1].mine : 1; };
 // Chantier : chaque jour, l'équipe apporte au plus 1/days de chaque matériau manquant, pris dans les réserves
 const siteProgress = b => { const c=B[b.type].cost; let tot=0, got=0; for (const k in c){ tot+=c[k]; got+=Math.min(c[k], b.build.got[k]||0); } return tot? got/tot : 1; };
 function advanceSite(i,b,now){
@@ -717,7 +739,12 @@ function equipNeeds(){
 }
 const STORE_WHERE = { riz:'un grenier à riz', bois:'un entrepôt de bois', pierre:'un dépôt de pierre', tetsu:'un entrepôt de minerais', dou:'un entrepôt de minerais', kin:'un entrepôt de minerais', hagane:'un arsenal', yari:'un arsenal', armes:'un arsenal', yoroi:'un arsenal' };
 function allocate(){
-  computeNet(); computeWalls(); computeSoldierCap(); computeStore();
+  computeNet(); computeWalls(); computeSoldierCap(); computeStore(); computeMineLinks();
+  { const L=[]; for (const [i,b] of bld) if (b.type==='mine'){ const t=tiles[i]; L.push(i+':'+mineLinkLv(t,t.ore)+':'+mineLinkLv(t,'pierre')); }
+    const sig=L.join(','); if (linkSig && sig!==linkSig){ const up = L.filter(x=>!linkSig.split(',').includes(x)).map(x=>x.split(':'));
+      const best = up.map(([i,a,b])=>Math.max(+a,+b)).filter(v=>v>0);
+      if (best.length) setTimeout(()=>toast(`Mine reliée à son entrepôt par la route : production ×${fr(ROAD_LV[Math.max(...best)-1].mine)}`),400); }
+    linkSig=sig; }
   let free = Math.floor(pop), prodRiz = 0; soldierUsed = 0; soldierNeed = 0;
   // les postes de garde et le château passent d'abord : ce sont eux qui logent les soldats des tours
   const order = [...bld].sort((a,b)=>(SOLDIER_CAP[b[1].type]?1:0)-(SOLDIER_CAP[a[1].type]?1:0));
@@ -760,7 +787,7 @@ function runDay(){
   const now = performance.now(), wasFull = new Set(fullNow); fullNow = new Set();
   for (const [i,b] of bld){
     if (b.state!=='ok' || !workersOf(b)) continue;
-    const d = B[b.type], t = tiles[i], mult = multOf(b)*(b.type==='mine'?roadBonus(t):1);
+    const d = B[b.type], t = tiles[i], mult = multOf(b), km = k => mult*(b.type==='mine'?mineLink(t,k):1);
     if (b.type==='forge'){
       const n = Math.min(FORGE_LV[lvlOf(b)-1].out, Math.floor(res.tetsu/2), Math.floor(res.bois/2));
       const room = Math.max(0, Math.floor((storeCap.hagane??1e9)-(res.hagane||0)));
@@ -776,11 +803,11 @@ function runDay(){
     if (!d.prod || b.build) continue;
     const gains = Object.assign({}, d.prod); if (b.type==='mine') gains[t.ore] = ORES[t.ore].rate;
     if (b.type==='riziere' && encl[i]) gains.riz += 1;
-    let stored = 0; for (const [k,v] of Object.entries(gains)) stored += gain(k, v*mult);
+    let stored = 0; for (const [k,v] of Object.entries(gains)) stored += gain(k, v*km(k));
     if (floaters.length<90){
       const k = b.type==='mine' ? t.ore : Object.keys(d.prod)[0];
       let [sx,sy]=pos(t); const f = t.ore && faceOf(t); if (f){ sx=f.bx; sy=f.by-4; }
-      floaters.push({x:sx,y:sy,txt: stored>0 ? '+'+(+(gains[k]*mult).toFixed(1))+RES[k].k : RES[k].k+' plein',c: stored>0 ? RES[k].color : '#ffc4b0',t0:now+Math.random()*400});
+      floaters.push({x:sx,y:sy,txt: stored>0 ? '+'+(+(gains[k]*km(k)).toFixed(1))+RES[k].k : RES[k].k+' plein',c: stored>0 ? RES[k].color : '#ffc4b0',t0:now+Math.random()*400});
     }
   }
   res.riz -= pop*EAT;
@@ -2978,8 +3005,9 @@ function resFlow(k){
       if (b.state==='ok' && d.cost[k]){ const need=d.cost[k]-(b.build.got[k]||0); if (need>0) add(cons,`Chantier · ${d.name.toLowerCase()}`, Math.min(need, Math.ceil(d.cost[k]/d.days))); }
       continue; }
     if (b.state!=='ok') continue;
-    const mult = multOf(b)*(b.type==='mine'?roadBonus(t):1);
-    if (b.type==='mine'){ if (k==='pierre') add(prod,'Mines',4*mult); if (t.ore===k) add(prod,`Mines de ${RES[k].name.toLowerCase()}`, ORES[k].rate*mult); continue; }
+    const mult = multOf(b);
+    if (b.type==='mine'){ const lk = mineLink(t,k)>1 ? ' (reliées)' : '';
+      if (k==='pierre') add(prod,'Mines'+lk,4*mult*mineLink(t,k)); if (t.ore===k) add(prod,`Mines de ${RES[k].name.toLowerCase()}${lk}`, ORES[k].rate*mult*mineLink(t,k)); continue; }
     if (b.type==='forge'){ const o=FORGE_LV[lvlOf(b)-1].out; if (k==='hagane') add(prod,'Forges',o); if (k==='tetsu') add(cons,'Forges',2*o); if (k==='bois') add(cons,'Forges (charbon)',2*o); continue; }
     if (b.type==='armurerie'){ const E=armoryPick(b); if (!E) continue; const o=ARM_LV[lvlOf(b)-1].out;
       if (E.key===k) add(prod,`Armurerie · ${E.name.toLowerCase()}s`,o); if (E.cost[k]) add(cons,`Armurerie · ${E.name.toLowerCase()}s`,E.cost[k]*o); continue; }
@@ -3080,8 +3108,8 @@ function showInfo(){
       const left = Math.max(...Object.keys(C).map(k=>Math.ceil((C[k]-(b.build.got[k]||0))/Math.ceil(C[k]/d.days))));
       rows += `<dt>Fin au plus tôt</dt><dd>dans ${left} jour${left>1?'s':''}</dd>`; }
     if (workersOf(b)){ let st = b.build ? (b.state!=='ok' ? 'bras' : b.build.wait ? 'wait' : 'site') : b.state; if (st==='route' && !isMine) st='route2'; const [c,l] = STATE[st]; rows += `<dt>État</dt><dd><span class="state ${c}">${l}${b.build&&b.build.wait&&b.build.missing?' : '+b.build.missing.join(' '):''}</span></dd><dt>${b.build?'Charpentiers':d.mil?'Soldats':b.type==='armurerie'?'Armuriers':b.type==='forge'?'Forgerons':'Ouvriers'}</dt><dd>${workersOf(b)}</dd>`;
-      const r1 = v => +(v*mult).toFixed(1);
-      const p = Object.entries(d.prod||{}).map(([k,v])=>`${r1(v)} ${RES[k].k}`); if (isMine) p.push(`${r1(ORES[t.ore].rate)} ${RES[t.ore].k}`);
+      const r1 = (v,k) => +(v*mult*(isMine?mineLink(t,k):1)).toFixed(2);
+      const p = Object.entries(d.prod||{}).map(([k,v])=>`${fr(r1(v,k))} ${RES[k].k}`); if (isMine) p.push(`${fr(r1(ORES[t.ore].rate,t.ore))} ${RES[t.ore].k}`);
       if (p.length) rows += `<dt>Par jour</dt><dd>${p.join(' + ')}</dd>`; }
     if (d.mil && !b.build){ const g = guardOf(i,b);
       { const E=EQUIP[tierOf(b)-1]; rows += `<dt>Équipés</dt><dd>${Math.min(b.arms||0,workersOf(b))} / ${workersOf(b)} ${E.k} ${E.name.toLowerCase()}${workersOf(b)>1?'s':''}</dd>`; }
@@ -3106,6 +3134,9 @@ function showInfo(){
       rows += `<dt>Renfort</dt><dd>${WALL_LV[lv-1].pts} point${lv>1?'s':''} pour les postes à portée</dd>`;
       if (lv<WALL_LV.length) acts += `<button class="act" id="aUp" type="button" ${canBuild('ameliorer',t).ok?'':'disabled'}>${WALL_LV[lv].name} · ${costTxt(WALL_LV[lv].cost)}</button>`; }
     if (b.type==='porte') rows += `<dt>Passage</dt><dd>la route traverse le rempart</dd>`;
+    if ((b.type==='kura_kane'||b.type==='kura_ishi') && !b.build){ const key=b.type==='kura_kane'?'kane':'ishi', ks=key==='kane'?null:'pierre';
+      const m=[...bld].filter(([j,x])=>x.type==='mine' && mineLinkLv(tiles[j], ks||tiles[j].ore)).length, tot=[...bld.values()].filter(x=>x.type==='mine').length;
+      rows += `<dt>Mines reliées</dt><dd>${m} / ${tot}${m<tot?' · reliez-les par la route':''}</dd>`; }
     if (d.store && !b.build) for (const k in d.store) rows += `<dt>${RES[k].k} ${RES[k].name}</dt><dd>+${d.store[k]} · réserve ${Math.floor(res[k]||0)} / ${storeCap[k]}</dd>`;
     if (isHouse(b)){ const m=b.type==='machiya'?2:1; rows += `<dt>Range</dt><dd>${HOUSE_STORE.riz*m} 米 · ${HOUSE_STORE.bois*m} 木 · ${HOUSE_STORE.pierre*m} 石</dd>`; }
     if (encl[i]) rows += `<dt>Enceinte</dt><dd>à l’abri des remparts${d.cap?' · +1 place':b.type==='riziere'?' · +1 米':''}</dd>`;
@@ -3117,9 +3148,13 @@ function showInfo(){
     if (isMine && !faceOf(t)) rows += `<dt>Entrée</dt><dd>de l’autre côté, tournez la vue</dd>`;
     if (d.cap) rows += `<dt>Logement</dt><dd>${d.cap} habitants</dd>`;
     if (isRoad(b)) rows += `<dt>Réseau</dt><dd>${net.has(i)?'Relié au village':'Isolé'}</dd>`;
-    if (isMine && roadBonus(t)>1) rows += `<dt>Bonus de route</dt><dd>×${roadBonus(t)}</dd>`;
+    if (isMine){ for (const [k,wn] of [[t.ore,'entrepôt de minerais'],['pierre','dépôt de pierre']]){ const L=mineLinkLv(t,k);
+        rows += `<dt>Route → ${wn}</dt><dd>${L ? `${ROAD_LV[L-1].name.toLowerCase()} · ${RES[k].k} ×${fr(ROAD_LV[L-1].mine)}` : `aucune · ${RES[k].k} ×1`}</dd>`; }
+      if (!mineLinkLv(t,t.ore) || !mineLinkLv(t,'pierre')) rows += `<dt>Astuce</dt><dd>reliez l’entrée à l’entrepôt par la route : ×1,25 à ×1,8</dd>`; }
     if (b.type==='chemin'){
-      rows += `<dt>Devant une mine</dt><dd>production ×${ROAD_LV[lv-1].mine}</dd>`;
+      { const a=linkLv.kane&&linkLv.kane[i], c=linkLv.ishi&&linkLv.ishi[i];
+        rows += `<dt>Liaison mine–entrepôt</dt><dd>${a||c ? `oui · ${[a?'minerais':'',c?'pierre':''].filter(Boolean).join(' et ')}` : 'non'}</dd>`;
+        rows += `<dt>Bonus sur une liaison</dt><dd>×${fr(ROAD_LV[lv-1].mine)} (le tronçon le plus faible compte)</dd>`; }
       if (lv<ROAD_LV.length){ const nx=ROAD_LV[lv]; acts += `<button class="act" id="aUp" type="button" ${canBuild('ameliorer',t).ok?'':'disabled'}>${nx.name} · ${costTxt(nx.cost)}</button>`; } }
     rows += `<dt>Altitude</dt><dd>${alt}</dd>`;
     if (b.type==='maison') acts += `<button class="act" id="aUp" type="button" ${canBuild('ameliorer',t).ok?'':'disabled'}>Améliorer · ${costTxt(B.machiya.cost)}</button>`;
@@ -3323,7 +3358,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
 });
-const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 15'; }).observe(vl,{childList:true}), vl.textContent += ' · version 15';
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 16'; }).observe(vl,{childList:true}), vl.textContent += ' · version 16';
 </script>
 </body>
 </html>
