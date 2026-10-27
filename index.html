@@ -1910,6 +1910,92 @@ const STORES = {
     barrel(h,.1,.75);
   }
 };
+/* --- Poste de garde (3×3) : enceinte de murs blancs, porte, baraquement, tour de pierre, corps de garde, cour d'entraînement --- */
+function makiwara(h,a,b){ const [x,y]=h.L(a,b,0), [x2,y2]=h.L(a,b,1.9);
+  ctx.strokeStyle='#5a3d22'; ctx.lineWidth=.9; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x2,y2); ctx.stroke();
+  poly([x2-1.3,y2+1, x2+1.3,y2+1, x2+1.2,y2+5.2, x2-1.2,y2+5.2],'#c9a964'); ctx.strokeStyle='#8a6a2e'; ctx.lineWidth=.35; ctx.beginPath(); for (const d of [1.9,3.1,4.3]){ ctx.moveTo(x2-1.25,y2+d); ctx.lineTo(x2+1.25,y2+d); } ctx.stroke(); }
+function mato(h,a,b){ const [x0,y0]=h.L(a,b,0), [x,y]=h.L(a,b,1.3);
+  ctx.strokeStyle='#5a3d22'; ctx.lineWidth=.6; ctx.beginPath(); ctx.moveTo(x0-1.6,y0); ctx.lineTo(x,y); ctx.moveTo(x0+1.6,y0); ctx.lineTo(x,y); ctx.stroke();
+  for (const [r,c] of [[2.6,'#f3eee4'],[2.1,'#2b2622'],[1.55,'#f3eee4'],[1.05,'#2b2622'],[.5,'#f3eee4']]){ ctx.fillStyle=c; ctx.beginPath(); ctx.ellipse(x,y-1.4,r*.8,r,0,0,7); ctx.fill(); } }
+function bowRack(h,a,b0,b1){ const R=(b,z)=>h.L(a,b,z);
+  ctx.strokeStyle=shade(DARKW,h.kA); ctx.lineWidth=.7; ctx.beginPath(); for (const b of [b0,b1]){ ctx.moveTo(...R(b,0)); ctx.lineTo(...R(b,1.4)); } ctx.moveTo(...R(b0-.02,1.25)); ctx.lineTo(...R(b1+.02,1.25)); ctx.stroke();
+  for (let k=0;k<4;k++){ const b=b0+.05+k*(b1-b0-.1)/3, [x0,y0]=R(b,.05), [x1,y1]=R(b,2.6);
+    ctx.strokeStyle='#2e2116'; ctx.lineWidth=.45; ctx.beginPath(); ctx.moveTo(x0,y0); ctx.quadraticCurveTo(x0+1.6,(y0+y1)/2,x1,y1); ctx.stroke();
+    ctx.strokeStyle='rgba(240,235,220,.8)'; ctx.lineWidth=.2; ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke(); } }
+// Trois outils de capture du corps de garde : sasumata (fourche), tsukubō (râteau en T), sodegarami (crochets)
+function capTools(h,a,b0,b1){ const R=(b,z)=>h.L(a,b,z);
+  ctx.strokeStyle=shade(DARKW,h.kA); ctx.lineWidth=.7; ctx.beginPath(); for (const b of [b0,b1]){ ctx.moveTo(...R(b,0)); ctx.lineTo(...R(b,1.8)); } ctx.moveTo(...R(b0-.02,1.55)); ctx.lineTo(...R(b1+.02,1.55)); ctx.stroke();
+  [0,1,2].forEach(k=>{ const b=b0+(k+.5)*(b1-b0)/3, [x0,y0]=R(b,.05), [x1,y1]=R(b,3.2);
+    ctx.strokeStyle='#6b4a2a'; ctx.lineWidth=.45; ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+    ctx.strokeStyle='#9aa3ab'; ctx.lineWidth=.55; ctx.beginPath();
+    if (k===0){ ctx.moveTo(x1-1.3,y1-1.6); ctx.quadraticCurveTo(x1,y1+.3,x1+1.3,y1-1.6); }
+    else if (k===1){ ctx.moveTo(x1-1.4,y1); ctx.lineTo(x1+1.4,y1); for (let d=-1.2; d<=1.25; d+=.6){ ctx.moveTo(x1+d,y1); ctx.lineTo(x1+d,y1-.6); } }
+    else { for (const dy of [0,-.9,-1.8]){ ctx.moveTo(x1,y1+dy); ctx.lineTo(x1+1,y1+dy-.6); ctx.moveTo(x1,y1+dy); ctx.lineTo(x1-1,y1+dy-.6); } }
+    ctx.stroke(); }); }
+function fireBuckets(h,a,b){ const [x,y]=h.L(a,b,0);
+  hbox(h,a-.12,a+.12,b-.12,b+.12,0,.16,'#6b4a2a');
+  for (const [dx,dy] of [[-1.5,-.8],[0,-.8],[1.5,-.8],[-.75,-2],[.75,-2],[0,-3.2]]){ const bx=x+dx, by=y+dy-.4;
+    poly([bx-.75,by, bx+.75,by, bx+.6,by-1.2, bx-.6,by-1.2],'#2b2622'); ctx.fillStyle='#b4462e'; ctx.fillRect(bx-.5,by-.95,1,.5); } }
+function nagaya(w,a0,a1,b0,b1){                 // baraquement : socle, bas en planches noires, étage blanc à colombages, fenêtres à barreaux
+  shadowH(w,a0,a1,b0,b1);
+  hbox(w,a0-.05,a1+.05,b0-.05,b1+.05,0,.3,STONE); stoneFace(FB(w,a0-.05,a1+.05,b1+.05),0,.3); stoneFace(FA(w,b0-.05,b1+.05,a1+.05),0,.3);
+  hbox(w,a0,a1,b0,b1,.3,2.0,'#efe6cf',false);
+  for (const f of [FB(w,a0,a1,b1),FA(w,b0,b1,a1)]){
+    frect(f,0,1,.3,1.0,'#2b2622'); for (let k=1;k<f.len*12;k++) fline(f,k/(f.len*12),.3,k/(f.len*12),1.0,'#47403a',.25);
+    fline(f,0,1.0,1,1.0,'#1d1a17',.5); const n=Math.max(2,Math.round(f.len*2.2)); timber(f,1.0,2.0,n,'#5a4632',[1.85]);
+    for (let k=0;k<n;k++) lattice(f,(k+.25)/n,(k+.75)/n,1.2,1.7,'#1d1a17','#d6d0c3'); }
+  { const f=FB(w,a0,a1,b1); door(f,.08,.2,.3,1.6); noren(f,.08,.2,.3,1.6,'#2f4a6b'); door(f,.8,.92,.3,1.6); }
+  irimoya(w,a0,a1,b0,b1,2.0,1.45,TIL,'#ece6da',{ov:.16,thick:.28});
+}
+function banshoHouse(h,a0,a1,b0,b1){           // corps de garde : façade ouverte sur la cour (+a), tatami, lanterne
+  shadowH(h,a0,a1,b0,b1);
+  hbox(h,a0-.04,a1+.04,b0-.04,b1+.04,0,.28,STONE);
+  hbox(h,a0,a1,b0,b1,.28,1.8,'#8e6b47',false);
+  { const f=FB(h,a0,a1,b1); planks(f,.28,1.8); lattice(f,.25,.75,.85,1.45,'#1d1510','#9b7448'); fline(f,0,1.65,1,1.65,DARKW,.6); }
+  { const f=FA(h,b0,b1,a1); frect(f,.08,.92,.28,1.5,'#2a1d12'); frect(f,.12,.88,.29,.42,'#c9bf86');
+    for (const t of [.12,.5,.88]) fline(f,t,.28,t,1.8,'#4a3220',.9); fline(f,0,1.5,1,1.5,'#4a3220',.7);
+    const [x,y]=f.F(.3,1.15); ctx.fillStyle='#efe6cf'; ctx.fillRect(x-.8,y-1.6,1.6,1.8); ctx.fillStyle='#2b2622'; ctx.font='700 1.4px serif'; ctx.textAlign='center'; ctx.fillText('番',x,y-.3); }
+  kiri(h,a0,a1,b0,b1,1.8,.9,TIL,'#8e6b47',{ov:.07,thick:.2});
+  hlant(h,a1+.25,b1-.1,1.4);
+}
+function guardGate(h,ga,gb,hw){                  // porte (yakuimon) dans le mur avant, passage selon b
+  const post=(a,dz,w,H,col)=>hbox(h,a-w,a+w,gb+dz-w,gb+dz+w,0,H,col);
+  post(ga-hw,-.18,.04,1.9,'#3a2414'); post(ga+hw,-.18,.04,1.9,'#3a2414');
+  for (const s of [-1,1]){ const a=ga+s*hw*.95; const q=[h.L(a,gb-.02,0),h.L(a-s*.02,gb-.3,0),h.L(a-s*.02,gb-.3,1.8),h.L(a,gb-.02,1.8)]; poly(q.flat(),shade('#6b4a2a',h.kA));
+    ctx.fillStyle='#c9a24a'; for (const z of [.5,1,1.4]){ const [x,y]=h.L(a-s*.01,gb-.16,z); ctx.beginPath(); ctx.arc(x,y,.25,0,7); ctx.fill(); } }
+  post(ga-hw,0,.07,2.4,'#4a3220'); hbox(h,ga-hw-.12,ga+hw+.12,gb-.28,gb+.07,2.05,2.3,'#3a2414'); post(ga+hw,0,.07,2.4,'#4a3220');
+  { const [x,y]=h.L(ga,gb+.08,1.85); ctx.fillStyle='#2e2116'; ctx.fillRect(x-1.2,y-.9,2.4,1.8); ctx.fillStyle='#efe6cf'; ctx.font='700 1.5px serif'; ctx.textAlign='center'; ctx.fillText('番所',x,y+.5); }
+  const [U0,U1,V0,V1]=hvb(h,ga-hw-.25,ga+hw+.25,gb-.4,gb+.2); gableRoof((U1-U0)>=(V1-V0),U0,U1,V0,V1,h.oz+2.3,.85,'#4f5a6c',.08,false,true);
+}
+function drawGuardD(h){
+  const E=1.46, T=.12;
+  h.Q([[-E,-E,0],[E,-E,0],[E,E,0],[-E,E,0]],'#a8996f');
+  h.Q([[-.3,-.45,0],[1.3,-.45,0],[1.3,1.25,0],[-.3,1.25,0]],'#c6ba98');
+  ctx.strokeStyle='rgba(150,136,100,.5)'; ctx.lineWidth=.3; ctx.beginPath(); for (let b=-.35;b<1.2;b+=.13){ ctx.moveTo(...h.L(-.25,b,0)); ctx.lineTo(...h.L(1.25,b,0)); } ctx.stroke();
+  h.Q([[-.25,1.0,0],[.25,1.0,0],[.25,E,0],[-.25,E,0]],'#b5a888');
+  // murs du fond
+  hdobei(h,-E,E,-E,-E+T,0); hdobei(h,-E,-E+T,-E,E,0);
+  // baraquement des soldats, tour de pierre, seaux à incendie
+  nagaya(HFat(!h.A,...h.uv(0,0),h.oz), -1.2,.0,-1.3,-.6);
+  TOWERS[1](HFat(h.A,...h.uv(.92,-.92),h.oz));
+  fireBuckets(h,.25,-.3);
+  // corps de garde et râtelier des outils de capture
+  banshoHouse(h,-1.25,-.55,.3,1.15);
+  capTools(h,-.32,.35,.8);
+  // cour : poteaux de frappe, cible de tir à l'arc, râtelier d'arcs, ballots de paille
+  makiwara(h,.25,.2); makiwara(h,.55,.2);
+  bowRack(h,1.15,-.25,.25);
+  mato(h,1.1,.75);
+  { const [x,y]=h.L(.6,.75,0); tawara(x,y,.8); tawara(x+2.2,y+.8,.8); }
+  barrel(h,-.25,1.25);
+  // mur de droite, mur avant et porte
+  hdobei(h,E-T,E,-E,E,0);
+  hdobei(h,-E,-.42,E-T,E,0);
+  guardGate(h,0,E-.06,.34);
+  hdobei(h,.42,E,E-T,E,0);
+  nobori(h,-.55,E+.1,0,5.2,'#b4462e','#f3ecdc'); nobori(h,.55,E+.1,0,5.2,'#f3ecdc','#b4462e');
+}
+STORES.garde = drawGuardD;
 function drawBuilding(b,t,sx,sy){
   switch(b.type){
     case 'forge': forgeSprite(t,b,sx,sy); break;
@@ -2094,7 +2180,7 @@ function drawCastle(u0,u1,v0,v1,z,extra=0){
     zz += h + r*.45;
   });
 }
-const BIG_H = { temple:16, garde:11, chateau:28, armurerie:10, kura_riz:9, kura_bois:8, kura_ishi:8, kura_kane:9, kura_arme:10 };       // hauteur approximative, en niveaux
+const BIG_H = { temple:16, garde:13, chateau:28, armurerie:10, kura_riz:9, kura_bois:8, kura_ishi:8, kura_kane:9, kura_arme:10 };       // hauteur approximative, en niveaux
 function drawBig(root, b){
   const ts = bigTiles(root); let umin=1e9,umax=-1e9,vmin=1e9,vmax=-1e9,hi=0,lo=99;
   for (const t of ts){ const [u,v]=rotXY(t.x,t.y); umin=Math.min(umin,u); umax=Math.max(umax,u); vmin=Math.min(vmin,v); vmax=Math.max(vmax,v); hi=Math.max(hi,t.h); lo=Math.min(lo,t.h); }
@@ -3124,7 +3210,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
 });
-const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 12'; }).observe(vl,{childList:true}), vl.textContent += ' · version 12';
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 13'; }).observe(vl,{childList:true}), vl.textContent += ' · version 13';
 </script>
 </body>
 </html>
