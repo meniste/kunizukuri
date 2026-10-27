@@ -13,7 +13,7 @@ Page de travail sur claude.ai : https://claude.ai/artifact/CLhV2JWH68gFYdVze4YpM
 2. Incrémenter le numéro partout : `VERSION` dans `sw.js` **et** le libellé `· version N` dans `index.html` (script en bas de page, visible dans le menu 国).
 3. Commit sur `main` (GitHub Pages publie `main` / racine). Le téléphone récupère la version à la prochaine ouverture avec réseau et se recharge seul.
 4. Republier aussi la page claude.ai (sans le bloc service worker / manifest).
-Version actuelle : **14**.
+Version actuelle : **15**.
 
 ## État du jeu
 - Carte procédurale 96×96 (graine), relief jusqu'à 50 niveaux, rivières qui suivent le courant, mer en bordure, 5 essences de forêt, 18 filons dans des parois de montagne (mines en façade).
@@ -29,6 +29,7 @@ Version actuelle : **14**.
 - Temple et château détaillés (`drawTempleD`, `drawCastleD`, appelés par `drawGrand`) : dessinés une fois par zoom dans une grande image en cache (`blitBig`, clé `B<type><A>`, repli en dessin direct au-delà de 3000 px). Temple : enceinte ocre à lignes blanches, grand hall, pagode à 5 toits, clocher, fontaine, lanternes, brûle-parfum, torii, porte. Château : douves, talus d'ishigaki, murs à meurtrières, 3 tourelles d'angle, porte-tour, pont, palais, jardin à étang, donjon à 5 niveaux (pignons chidori, kara-hafu, shachihoko).
 - Poste de garde détaillé (v13, `drawGuardD`, branché via `STORES.garde` → `drawGrand`/`blitBig`) : enceinte de murs blancs `hdobei`, porte `guardGate`, baraquement `nagaya`, tour de pierre (`TOWERS[1]` décalée), corps de garde `banshoHouse` et outils de capture `capTools`, cour d'entraînement (makiwara, cible `mato`, râtelier d'arcs), seaux à incendie, bannières.
 - Fiche ressource (v14) : toucher un compteur du haut (`data-k`, variable `resSel`) ouvre `resInfoHTML(k)` dans le panneau : stock / place, prévision (plein ou épuisé dans N jours), production et consommation du jour par source (`resFlow`), répartition du stock réserve → maisons → entrepôts (`resPlaces`). Fiches spéciales pour 人 (habitants, logement) et 兵 (soldats, postes).
+- Menu de construction (v15) : `.tools` contient `.tlist` (liste qui défile) et `.tsb` (barre de défilement dessinée, toujours visible, glissable : `syncToolBar`, `setupToolScroll`), hauteur max 62 % de l'écran.
 - Sauvegarde : `localStorage` clé `kunizukuri5`.
 
 ## Pistes suivantes évoquées

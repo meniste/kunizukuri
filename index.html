@@ -88,17 +88,23 @@ button:focus-visible{outline:2px solid var(--kin);outline-offset:2px}
 .clock.paused .cb.play{background:var(--shu)}
 
 .tools{position:fixed;left:max(12px,env(safe-area-inset-left,0px));bottom:calc(70px + env(safe-area-inset-bottom,0px));
-  max-height:calc(100% - 140px);overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:4px;
-  background:var(--washi);border-radius:8px;box-shadow:0 8px 24px rgba(60,40,20,.35);scrollbar-width:none;z-index:4}
-.tool{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:6px 10px 6px 6px;border:0;background:transparent;border-radius:5px;
+  max-height:min(62vh, calc(100vh - 150px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)));display:flex;padding:3px;
+  background:var(--washi);border-radius:8px;box-shadow:0 8px 24px rgba(60,40,20,.35);z-index:4;overflow:hidden}
+.tools .tlist{overflow-y:auto;display:flex;flex-direction:column;gap:1px;padding-right:12px;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.tools .tlist::-webkit-scrollbar{display:none}
+.tools .tsb{position:absolute;right:4px;top:8px;bottom:8px;width:5px;border-radius:3px;background:var(--washi-2);touch-action:none;cursor:pointer}
+.tools .tsb::before{content:'';position:absolute;inset:0 -8px}
+.tools .tsb i{position:absolute;left:0;right:0;border-radius:3px;background:#9a8f7a;min-height:24px}
+.tools .tsb.drag i{background:var(--shu)}
+.tool{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:4px 8px 4px 4px;border:0;background:transparent;border-radius:5px;
   cursor:pointer;color:var(--ink);text-align:left}
-.tool .k{font-family:var(--f-disp);font-weight:800;font-size:20px;width:28px;text-align:center;line-height:1}
-.tool .l{font-size:13px;font-weight:500;white-space:nowrap}
-.tool .c{font-size:11px;color:var(--muted);white-space:nowrap;margin-left:auto;padding-left:8px;font-variant-numeric:tabular-nums}
+.tool .k{font-family:var(--f-disp);font-weight:800;font-size:17px;width:24px;text-align:center;line-height:1}
+.tool .l{font-size:12.5px;font-weight:500;white-space:nowrap}
+.tool .c{font-size:10.5px;color:var(--muted);white-space:nowrap;margin-left:auto;padding-left:8px;font-variant-numeric:tabular-nums}
 .tool:hover{background:var(--washi-2)}
 .tool[aria-pressed="true"]{background:var(--ink);color:var(--washi)}
 .tool[aria-pressed="true"] .c{color:rgba(243,236,220,.7)}
-.tools .next{font-size:11px;color:var(--muted);padding:6px 8px 4px;border-top:1px solid var(--washi-2);margin-top:2px;max-width:190px;line-height:1.4}
+.tools .next{font-size:10.5px;color:var(--muted);padding:5px 6px 3px;border-top:1px solid var(--washi-2);margin-top:2px;max-width:190px;line-height:1.4}
 
 .pill{position:fixed;left:50%;transform:translateX(-50%);top:calc(52px + env(safe-area-inset-top,0px));
   display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--washi);padding:5px 5px 5px 12px;border-radius:999px;
@@ -2880,11 +2886,12 @@ let paletteOpen=false, villageOpen=false;
 function buildTools(){
   const items = TOOL_LIST.filter(id=>era>=toolDef(id).era);
   const next = era<2 ? `À ${ERA2_POP} habitants : chemins, mines, forge, armurerie, postes de garde, tours de guet et remparts.` : era<3 ? `À ${ERA3_POP} habitants : temple et château.` : 'Bientôt : maison de santé.';
-  $('tools').innerHTML = items.map(id=>{ const d=toolDef(id);
+  $('tools').innerHTML = '<div class="tlist">' + items.map(id=>{ const d=toolDef(id);
     const c = id==='ameliorer' ? 'bâtiment, chemin, rempart' : id==='rempart' ? `${costTxt(d.cost)} la case` : id==='defricher' ? '1 case · +3 木' : d.w ? `${d.w}×${d.h} · chantier ${d.days} j` : d.cost ? costTxt(d.cost) : '';
     return `<button class="tool" data-tool="${id}" aria-pressed="${tool===id}" type="button" title="${d.hint||''}"><span class="k">${d.k}</span><span class="l">${d.name}</span><span class="c">${c}</span></button>`;
-  }).join('') + `<div class="next">${next}</div>`;
+  }).join('') + `<div class="next">${next}</div></div><div class="tsb" aria-hidden="true"><i></i></div>`;
   $('tools').querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>{ setTool(b.dataset.tool); setPalette(false); }));
+  setupToolScroll();
   updateTools();
 }
 function updateTools(){
@@ -2899,7 +2906,25 @@ function updateTools(){
   pill.querySelector('button').onclick = ()=>setTool('look');
 }
 function setTool(id){ tool=id; bridgeStart=null; if (id!=='look'){ selected=null; villageOpen=false; resSel=null; showInfo(); renderRes(); } updateTools(); dirty=true; }
-function setPalette(open){ paletteOpen=open; $('tools').hidden=!open; $('buildBtn').setAttribute('aria-expanded',open); if(open) setMenu(false); }
+function setPalette(open){ paletteOpen=open; $('tools').hidden=!open; $('buildBtn').setAttribute('aria-expanded',open); if(open){ setMenu(false); requestAnimationFrame(syncToolBar); } }
+// Barre de défilement du menu, toujours visible (Safari sur iPhone masque les barres natives) ; on peut la faire glisser
+function syncToolBar(){
+  const L=$('tools').querySelector('.tlist'), T=$('tools').querySelector('.tsb'); if (!L||!T) return;
+  const over = L.scrollHeight > L.clientHeight+1; T.style.display = over ? '' : 'none'; if (!over) return;
+  const th=T.clientHeight, h=Math.max(24, th*L.clientHeight/L.scrollHeight), top=(th-h)*L.scrollTop/(L.scrollHeight-L.clientHeight);
+  const i=T.firstChild; i.style.height=h+'px'; i.style.top=top+'px';
+}
+function setupToolScroll(){
+  const L=$('tools').querySelector('.tlist'), T=$('tools').querySelector('.tsb');
+  L.addEventListener('scroll', syncToolBar, {passive:true});
+  const to = e => { const r=T.getBoundingClientRect(), i=T.firstChild, h=i.offsetHeight, f=clamp((e.clientY-r.top-h/2)/(r.height-h),0,1); L.scrollTop=f*(L.scrollHeight-L.clientHeight); };
+  T.addEventListener('pointerdown', e=>{ e.preventDefault(); T.setPointerCapture(e.pointerId); T.classList.add('drag'); to(e); });
+  T.addEventListener('pointermove', e=>{ if (T.hasPointerCapture(e.pointerId)) to(e); });
+  const end = e=>{ T.classList.remove('drag'); };
+  T.addEventListener('pointerup', end); T.addEventListener('pointercancel', end);
+  syncToolBar();
+}
+addEventListener('resize', ()=>{ if (paletteOpen) syncToolBar(); });
 function setMenu(open){ $('menu').hidden=!open; $('menuBtn').setAttribute('aria-expanded',open); }
 let goalsLeft = 0;
 function updateBadge(){ goalsHTML(); const bd=$('badge'); bd.textContent=goalsLeft; bd.hidden=!goalsLeft; }
@@ -3298,7 +3323,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
 });
-const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 14'; }).observe(vl,{childList:true}), vl.textContent += ' · version 14';
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 15'; }).observe(vl,{childList:true}), vl.textContent += ' · version 15';
 </script>
 </body>
 </html>
