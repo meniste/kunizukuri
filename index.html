@@ -123,6 +123,16 @@ button:focus-visible{outline:2px solid var(--kin);outline-offset:2px}
 .info .act.alt{background:transparent;color:var(--shu);border:1px solid var(--shu)}
 .info .close{position:absolute;top:4px;right:6px;border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer;width:28px;height:28px}
 .info p{margin:0;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.chip{cursor:pointer}
+.chip.on{background:var(--washi);color:var(--ink);box-shadow:0 0 0 1.5px var(--shu)}
+.info dt.sec{grid-column:1/-1;color:var(--shu);font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-top:6px}
+.rbar{display:block;height:6px;border-radius:3px;background:var(--washi-2);overflow:hidden}
+.rbar i{display:block;height:100%;background:#8ea35a;border-radius:3px}
+.rbar.high i{background:var(--kin)} .rbar.full i{background:var(--shu)}
+.places{display:grid;gap:6px;margin-top:-4px}
+.places .pl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:12.5px}
+.places .pl span:nth-child(2){font-variant-numeric:tabular-nums;color:var(--muted)}
+.places .pl .rbar{grid-column:1/-1;height:4px}
 .state{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:999px}
 .state.ok{background:#dfe7cc;color:#3e5a22}
 .state.bad{background:#f3d5cb;color:#8e2f1b}
@@ -2859,7 +2869,7 @@ function renderRes(){
   const RX = Object.assign({}, RES, { sold:{k:'兵',name:'Soldats en poste / logés dans les postes de garde',color:'#b4462e'} });
   const fill = k => { const c=storeCap[k]; if (!c) return ''; const f=Math.min(1,(res[k]||0)/c); return `<i class="fill${f>=.999?' full':f>.85?' high':''}" style="width:calc((100% - 30px) * ${f.toFixed(3)})"></i>`; };
   $('res').innerHTML = chips.map(([k,v])=>{ const c=storeCap[k], full = c && (res[k]||0) >= c-1e-6;
-    return `<div class="chip${(k==='riz'&&rizRate<0)||full?' warn':''}" title="${RX[k].name}${c?` · ${Math.floor(res[k]||0)} / ${c}${full?' (plein)':''}`:''}${k==='riz'?` (${rizRate>=0?'+':''}${rizRate.toFixed(1)} par jour)`:''}"><b style="background:${RX[k].color}${k==='sold'?';color:#fff':''}">${RX[k].k}</b>${v}${fill(k)}</div>`; }).join('');
+    return `<div class="chip${(k==='riz'&&rizRate<0)||full?' warn':''}${resSel===k?' on':''}" data-k="${k}" role="button" tabindex="0" title="${RX[k].name}${c?` · ${Math.floor(res[k]||0)} / ${c}${full?' (plein)':''}`:''}${k==='riz'?` (${rizRate>=0?'+':''}${rizRate.toFixed(1)} par jour)`:''}"><b style="background:${RX[k].color}${k==='sold'?';color:#fff':''}">${RX[k].k}</b>${v}${fill(k)}</div>`; }).join('');
 }
 const TOOL_LIST = ['riziere','maison','bucheron','kura_riz','kura_bois','defricher','canal','chemin','pont','mine','kura_ishi','kura_kane','ameliorer','forge','armurerie','kura_arme','garde','tour','rempart','temple','chateau','demolir'];
 const DEFRICHER = { k:'伐', name:'Défricher', era:1, cost:null, hint:'Rase la forêt case par case · +3 木 par case' };
@@ -2888,7 +2898,7 @@ function updateTools(){
   pill.hidden = false;
   pill.querySelector('button').onclick = ()=>setTool('look');
 }
-function setTool(id){ tool=id; bridgeStart=null; if (id!=='look'){ selected=null; villageOpen=false; showInfo(); } updateTools(); dirty=true; }
+function setTool(id){ tool=id; bridgeStart=null; if (id!=='look'){ selected=null; villageOpen=false; resSel=null; showInfo(); renderRes(); } updateTools(); dirty=true; }
 function setPalette(open){ paletteOpen=open; $('tools').hidden=!open; $('buildBtn').setAttribute('aria-expanded',open); if(open) setMenu(false); }
 function setMenu(open){ $('menu').hidden=!open; $('menuBtn').setAttribute('aria-expanded',open); }
 let goalsLeft = 0;
@@ -2929,6 +2939,81 @@ const STATE = { site:['ok','Chantier en cours'], wait:['bad','Chantier en attent
   route2:['bad','Pas relié au village par un chemin'], armes:['bad','Soldats pas encore équipés'], fer:['bad','Manque de minerai (2 鉄) ou de bois (2 木)'],
   soldats:['bad','Pas assez de soldats : construisez un poste de garde'], acier:['bad','Manque d’acier 鋼 (ou de cuivre 銅 pour les armures)'], repos:['ok','Au repos : rien à forger pour l’instant'] };
 let lastInfoKey = '';
+/* ---------- Fiche d'une ressource (touchez un compteur en haut) ---------- */
+let resSel = null;
+const fmt = v => { const a=Math.abs(v); return (a>=10||Math.abs(a-Math.round(a))<.05) ? String(Math.round(v)) : v.toFixed(1); };
+const sgn = v => (v>0?'+':v<0?'−':'')+fmt(Math.abs(v));
+// Production et consommation estimées pour un jour, par source
+function resFlow(k){
+  const prod=new Map(), cons=new Map();
+  const add=(m,label,v)=>{ if (!v) return; const e=m.get(label)||{n:0,v:0}; e.n++; e.v+=v; m.set(label,e); };
+  for (const [i,b] of bld){
+    const d=B[b.type], t=tiles[i];
+    if (b.build){                                     // chantier : apport du jour
+      if (b.state==='ok' && d.cost[k]){ const need=d.cost[k]-(b.build.got[k]||0); if (need>0) add(cons,`Chantier · ${d.name.toLowerCase()}`, Math.min(need, Math.ceil(d.cost[k]/d.days))); }
+      continue; }
+    if (b.state!=='ok') continue;
+    const mult = multOf(b)*(b.type==='mine'?roadBonus(t):1);
+    if (b.type==='mine'){ if (k==='pierre') add(prod,'Mines',4*mult); if (t.ore===k) add(prod,`Mines de ${RES[k].name.toLowerCase()}`, ORES[k].rate*mult); continue; }
+    if (b.type==='forge'){ const o=FORGE_LV[lvlOf(b)-1].out; if (k==='hagane') add(prod,'Forges',o); if (k==='tetsu') add(cons,'Forges',2*o); if (k==='bois') add(cons,'Forges (charbon)',2*o); continue; }
+    if (b.type==='armurerie'){ const E=armoryPick(b); if (!E) continue; const o=ARM_LV[lvlOf(b)-1].out;
+      if (E.key===k) add(prod,`Armurerie · ${E.name.toLowerCase()}s`,o); if (E.cost[k]) add(cons,`Armurerie · ${E.name.toLowerCase()}s`,E.cost[k]*o); continue; }
+    if (d.prod && d.prod[k]) add(prod, d.name+(b.type==='riziere'?'s':b.type==='bucheron'?'s':''), d.prod[k] + (b.type==='riziere'&&encl[i]?1:0));
+  }
+  if (k==='riz') add(cons, `Habitants (${Math.floor(pop)} × ${EAT})`, pop*EAT);
+  const P=[...prod].map(([l,e])=>({l,n:e.n,v:e.v})), C=[...cons].map(([l,e])=>({l,n:e.n,v:e.v}));
+  return { P, C, net: P.reduce((a,x)=>a+x.v,0)-C.reduce((a,x)=>a+x.v,0) };
+}
+// Où se trouve la place : réserve du village, maisons, entrepôts (on remplit d'abord les entrepôts)
+function resPlaces(k){
+  const L=[{l:'Réserve du village', c:STORE_BASE[k]||0}];
+  let nm=0, nu=0; const ws=new Map();
+  for (const [,b] of bld){ if (b.type==='maison') nm++; if (b.type==='machiya') nu++; const st=B[b.type].store; if (st && st[k]){ const e=ws.get(b.type)||{n:0,c:0,build:0}; if (b.build) e.build++; else { e.n++; e.c+=st[k]; } ws.set(b.type,e); } }
+  if (nm) L.push({l:`Maisons × ${nm}`, c:nm*HOUSE_STORE[k]});
+  if (nu) L.push({l:`Maisons améliorées × ${nu}`, c:nu*HOUSE_STORE[k]*2});
+  const W=[]; for (const [ty,e] of ws){ if (e.n) W.push({l:`${B[ty].name} × ${e.n}`, c:e.c}); if (e.build) W.push({l:`${B[ty].name} en chantier`, c:0, soon:e.build*B[ty].store[k]}); }
+  const all=[...L,...W]; let left=Math.floor(res[k]||0);
+  for (const x of all){ x.f=Math.min(x.c,left); left-=x.f; }
+  if (left>0) all[0].f += left;                      // vieille partie : au-delà de la place
+  return all;
+}
+const barHTML = (f,c,full) => `<span class="rbar${full?' full':f/c>.85?' high':''}"><i style="width:${c?Math.min(100,f/c*100).toFixed(1):0}%"></i></span>`;
+function resInfoHTML(k){
+  if (k==='pop'){
+    const cap=capOf(), used=[...bld.values()].reduce((a,b)=>a+(b.state==='ok'&&!B[b.type].mil?workersOf(b):0),0);
+    let nm=0,nu=0,tp=0,en=0; for (const [i,b] of bld){ if (b.type==='maison') nm++; if (b.type==='machiya') nu++; if (B[b.type].cap){ if (templeNear(tiles[i])) tp+=2; if (encl[i]) en++; } }
+    return `<header><div class="bigk">人</div><div><h2>Habitants</h2><div class="coord">${Math.floor(pop)} / ${cap} logés</div></div></header>${barHTML(pop,cap,pop>=cap)}
+      <dl><dt>Au travail</dt><dd>${used}</dd><dt>Soldats en poste</dt><dd>${soldierUsed}</dd><dt>Sans emploi</dt><dd>${Math.max(0,Math.floor(pop)-used-soldierUsed)}</dd>
+      <dt class="sec">Logement</dt><dt>Maisons × ${nm}</dt><dd>${nm*B.maison.cap}</dd>${nu?`<dt>Maisons améliorées × ${nu}</dt><dd>${nu*B.machiya.cap}</dd>`:''}${tp?`<dt>Temples voisins</dt><dd>+${tp}</dd>`:''}${en?`<dt>Dans l’enceinte</dt><dd>+${en}</dd>`:''}</dl>
+      <p>${pop>=cap?'Toutes les maisons sont pleines : construisez-en pour que le village grandisse.':rizRate<0?'Le riz manque : le village ne grandira pas tant que la récolte ne suffit pas.':'Le village grandit chaque jour tant qu’il reste de la place et du riz.'}</p>`;
+  }
+  if (k==='sold'){
+    const L=[]; for (const [i,b] of bld){ if (SOLDIER_CAP[b.type]) L.push(`<dt>${B[b.type].name}${b.build?' (chantier)':''}</dt><dd>${b.build||!linked(i,b)?'0 · '+(b.build?'pas fini':'pas relié'):SOLDIER_CAP[b.type]+' places'}</dd>`); }
+    const U=[]; for (const [,b] of bld){ if (!B[b.type].mil||b.build) continue; const E=EQUIP[tierOf(b)-1]; U.push(`<dt>${b.type==='tour'?TOUR_LV[lvlOf(b)-1].name:B[b.type].name}</dt><dd>${workersOf(b)} ${E.k} · ${b.state==='ok'?'en poste':STATE[b.state]?STATE[b.state][1].toLowerCase():b.state}</dd>`); }
+    return `<header><div class="bigk">兵</div><div><h2>Soldats</h2><div class="coord">${soldierUsed} en poste · ${soldierCap} places · ${soldierNeed} demandés</div></div></header>${barHTML(soldierUsed,soldierCap,soldierNeed>soldierCap)}
+      <dl><dt class="sec">Logés par</dt>${L.join('')||'<dt>Aucun poste de garde</dt><dd>—</dd>'}<dt class="sec">Affectés à</dt>${U.join('')||'<dt>Aucun poste</dt><dd>—</dd>'}</dl>
+      <p>Chaque poste de garde loge 8 soldats, le château 30. Ce sont des habitants : ils ne travaillent plus aux champs.</p>`;
+  }
+  const v=res[k]||0, c=storeCap[k]||0, full=v>=c-1e-6, F=resFlow(k), places=resPlaces(k);
+  const rows = (A,sign) => A.length ? A.sort((a,b)=>b.v-a.v).map(x=>`<dt>${x.l}${x.n>1&&!/×|\(/.test(x.l)?` × ${x.n}`:''}</dt><dd>${sign}${fmt(x.v)}</dd>`).join('') : `<dt>Rien</dt><dd>—</dd>`;
+  const days = F.net>0 && !full ? `plein dans ${Math.ceil((c-v)/F.net)} jour${Math.ceil((c-v)/F.net)>1?'s':''}` : F.net<0 && v>0 ? `épuisé dans ${Math.ceil(v/-F.net)} jour${Math.ceil(v/-F.net)>1?'s':''}` : full && F.net>0 ? `plein : ${fmt(F.net)} perdus par jour` : 'stable';
+  const where = STORE_WHERE[k];
+  return `<header><div class="bigk" style="background:${RES[k].color}">${RES[k].k}</div><div><h2>${RES[k].name}</h2><div class="coord">${Math.floor(v)} / ${c} · ${Math.round(c?v/c*100:0)} % du stock</div></div></header>
+    ${barHTML(v,c,full)}
+    <dl><dt>Par jour</dt><dd style="font-weight:700;color:${F.net<0?'var(--shu)':'inherit'}">${sgn(F.net)} ${RES[k].k}</dd><dt>Prévision</dt><dd>${days}</dd>
+    <dt class="sec">Production</dt>${rows(F.P,'+')}
+    <dt class="sec">Consommation</dt>${rows(F.C,'−')}
+    <dt class="sec">Répartition du stock</dt></dl>
+    <div class="places">${places.map(x=>`<div class="pl"><span>${x.l}</span><span>${x.soon?`+${x.soon} à la fin`:`${Math.floor(x.f)} / ${x.c}`}</span>${x.soon?'':barHTML(x.f,x.c,x.c&&x.f>=x.c)}</div>`).join('')}</div>
+    ${full||c-v<Math.max(10,F.net*3)?`<p>${full?'Réserve pleine':'Bientôt pleine'} : construisez ${where} pour garder davantage.</p>`:''}`;
+}
+function showResInfo(){
+  const el=$('info'); el.hidden=false;
+  el.innerHTML = `<button class="close" id="closeInfo" aria-label="Fermer" type="button">×</button>` + resInfoHTML(resSel);
+  $('closeInfo').onclick = ()=>{ resSel=null; showInfo(); renderRes(); };
+  lastInfoKey='';
+}
+
 function storeRows(){
   const ks = STORE_KEYS.filter(k=>(res[k]||0)>0 || ['riz','bois'].includes(k) || (k==='pierre'&&era>=2));
   return `<dt style="grid-column:1/-1;color:var(--shu);font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-top:4px">Réserves</dt>` +
@@ -2944,6 +3029,7 @@ function armyRows(){
 function showInfo(){
   const el = $('info');
   const used = [...bld.values()].reduce((a,b)=>a+(b.state==='ok'?workersOf(b):0),0);
+  if (resSel && !selected && !villageOpen){ showResInfo(); return; }
   if (!selected && !villageOpen){ el.hidden = true; lastInfoKey=''; return; }
   el.hidden = false;
   if (!selected){
@@ -3137,7 +3223,7 @@ function endPtr(e,cancel){
         } else { const a=bridgeStart; bridgeStart=null; if (a===t) act('pont',t); else buildSpan(a,t); updateTools(); }
       }
       else if (tool!=='look') act(tool,t);
-      else { const r = tiles[rootOf(I(t.x,t.y))]; selected = (selected===r) ? null : r; villageOpen=false; showInfo(); }
+      else { const r = tiles[rootOf(I(t.x,t.y))]; selected = (selected===r) ? null : r; villageOpen=false; if (selected && resSel){ resSel=null; renderRes(); } showInfo(); }
       dirty=true;
     }
   }
@@ -3167,7 +3253,9 @@ addEventListener('keydown',e=>{
 });
 $('buildBtn').onclick = ()=>setPalette(!paletteOpen);
 $('menuBtn').onclick = ()=>setMenu($('menu').hidden);
-$('villageBtn').onclick = ()=>{ villageOpen = !villageOpen || !!selected; selected=null; setPalette(false); showInfo(); dirty=true; };
+$('res').addEventListener('click', e=>{ const c=e.target.closest('[data-k]'); if (!c) return; const k=c.dataset.k;
+  resSel = resSel===k ? null : k; selected=null; villageOpen=false; setPalette(false); setMenu(false); renderRes(); showInfo(); dirty=true; });
+$('villageBtn').onclick = ()=>{ villageOpen = !villageOpen || !!selected; selected=null; resSel=null; renderRes(); setPalette(false); showInfo(); dirty=true; };
 addEventListener('resize',resize);
 
 /* ---------- Démarrage ---------- */
@@ -3210,7 +3298,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
 });
-const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 13'; }).observe(vl,{childList:true}), vl.textContent += ' · version 13';
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 14'; }).observe(vl,{childList:true}), vl.textContent += ' · version 14';
 </script>
 </body>
 </html>
