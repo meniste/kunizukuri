@@ -220,6 +220,7 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const RES = {
   pop:    { k:'人', name:'Habitants', color:'#efe3c6' },
   riz:    { k:'米', name:'Riz',       color:'#f4eedb' },
+  sakana: { k:'魚', name:'Poisson',   color:'#a9c7d0' },
   bois:   { k:'木', name:'Bois',      color:'#c0915a' },
   pierre: { k:'石', name:'Pierre',    color:'#aaa69c' },
   tetsu:  { k:'鉄', name:'Minerai de fer', color:'#8d9aa6' },
@@ -238,20 +239,21 @@ const EQUIP = [
 ];
 const SOLDIER_CAP = { garde:8, chateau:30 };
 // Stockage : réserve du village, un peu dans chaque maison, beaucoup dans les entrepôts (chacun sa ressource)
-const STORE_BASE  = { riz:60, bois:60, pierre:40, tetsu:20, dou:15, kin:10, hagane:10, yari:6, armes:6, yoroi:6 };
-const HOUSE_STORE = { riz:20, bois:12, pierre:8, tetsu:4, dou:3, kin:2, hagane:2, yari:1, armes:1, yoroi:1 };   // maison améliorée : ×2
+const STORE_BASE  = { sakana:30, riz:60, bois:60, pierre:40, tetsu:20, dou:15, kin:10, hagane:10, yari:6, armes:6, yoroi:6 };
+const HOUSE_STORE = { sakana:6, riz:20, bois:12, pierre:8, tetsu:4, dou:3, kin:2, hagane:2, yari:1, armes:1, yoroi:1 };   // maison améliorée : ×2
 const STORE_KEYS = Object.keys(STORE_BASE);          // soldats logés par chaque poste de garde / le château
 const ORES = { tetsu:{rate:3}, dou:{rate:2}, kin:{rate:.8} };
 const EAT = .6;                                    // riz par habitant et par jour
 const B = {
   riziere:  { k:'田', name:'Rizière',          era:1, cost:{bois:5},  workers:2, prod:{riz:7},  hint:'Terrain plat, à 2 cases d’une rivière' },
   maison:   { k:'家', name:'Maison',           era:1, cost:{bois:8},  cap:4,                   hint:'Loge 4 habitants · range 20 米 et 12 木' },
+  pecheur:  { k:'漁', name:'Pêcheur',          era:1, cost:{bois:10}, workers:2, prod:{sakana:4}, hint:'Au bord de l’eau · 6 魚 par jour en mer, 4 en rivière · le poisson nourrit jusqu’à la moitié du village' },
   bucheron: { k:'木', name:'Bûcheron',         era:1, cost:{bois:6},  workers:2, prod:{bois:5}, hint:'À côté d’une forêt' },
   chemin:   { k:'道', name:'Chemin',           era:2, cost:{bois:1},                           hint:'Monte d’un niveau par case au plus' },
   pont:     { k:'橋', name:'Pont en bois',     era:2, cost:{bois:6},                           hint:'Touchez une rive puis l’autre : le pont enjambe toute l’eau entre les deux' },
   mine:     { k:'鉱', name:'Mine',             era:2, cost:{bois:15}, workers:3, prod:{pierre:4}, hint:'Dans une paroi marquée de filons, reliée par chemin' },
   machiya:  { k:'町', name:'Maison améliorée', era:2, cost:{bois:20,riz:15}, cap:8,            hint:'Remplace une maison, loge 8 · range deux fois plus' },
-  kura_riz: { k:'倉', name:'Grenier à riz',          era:1, cost:{bois:40},                     crew:2, days:2, w:2, h:2, store:{riz:500}, hint:'2×2 cases · garde 500 米 de plus' },
+  kura_riz: { k:'倉', name:'Grenier à riz',          era:1, cost:{bois:40},                     crew:2, days:2, w:2, h:2, store:{riz:500,sakana:200}, hint:'2×2 cases · garde 500 米 et 200 魚 (poisson séché) de plus' },
   kura_bois:{ k:'材', name:'Entrepôt de bois',        era:1, cost:{bois:30},                     crew:2, days:2, w:2, h:2, store:{bois:400}, hint:'2×2 cases · garde 400 木 de plus' },
   kura_ishi:{ k:'礎', name:'Dépôt de pierre',         era:2, cost:{bois:40,pierre:20},           crew:3, days:2, w:2, h:2, store:{pierre:400}, hint:'2×2 cases · garde 400 石 de plus · relié aux mines par la route : pierre ×1,25 à ×1,8' },
   kura_kane:{ k:'蔵', name:'Entrepôt de minerais',    era:2, cost:{bois:50,pierre:40},           crew:3, days:3, w:2, h:2, store:{tetsu:200,dou:150,kin:80}, hint:'2×2 cases · garde 200 鉄, 150 銅 et 80 金 de plus · relié aux mines par la route : minerai ×1,25 à ×1,8' },
@@ -259,7 +261,7 @@ const B = {
   forge:    { k:'炉', name:'Forge',            era:2, cost:{bois:25,pierre:20}, workers:3, road:true, hint:'Fond le minerai : 2 鉄 + 2 木 → 1 鋼 (acier) par jour · reliée par un chemin' },
   armurerie:{ k:'武', name:'Armurerie',        era:2, cost:{bois:40,pierre:30}, workers:3, crew:3, days:3, w:2, h:2, road:true, hint:'2×2 cases · forge lances 槍, sabres 刀 et armures 鎧 avec l’acier 鋼 · reliée par un chemin' },
   tour:     { k:'櫓', name:'Tour de guet',     era:2, cost:{bois:20}, mil:true, road:true, hint:'Découvre la carte sur 11 cases dès sa construction · avec 2 soldats armés de lances 槍 venus d’un poste de garde, et reliée par un chemin, étend vos terres sur 6 cases' },
-  rempart:  { k:'塁', name:'Rempart',          era:2, cost:{bois:3}, hint:'Case par case · renforce les postes proches · une enceinte fermée protège ce qu’elle entoure' },
+  rempart:  { k:'塁', name:'Rempart',          era:2, cost:{bois:3}, hint:'Case par case · renforce les postes proches · une enceinte fermée (la mer, les rivières et les montagnes de plus de 800 m comptent comme rempart) protège ce qu’elle entoure' },
   porte:    { k:'門', name:'Porte',            era:2, cost:{bois:10,pierre:4}, hint:'Rempart posé sur un chemin : on passe' },
   temple:   { k:'寺', name:'Temple',          era:3, cost:{bois:260,pierre:180}, workers:4, crew:6, days:8, w:5, h:7, hint:'5×7 cases · +2 places dans les maisons à 10 cases' },
   garde:    { k:'番', name:'Poste de garde',  era:2, cost:{bois:60,pierre:40,tetsu:10}, workers:3, crew:4, days:4, w:3, h:3, guard:9, mil:true, road:true, hint:'3×3 cases · caserne : loge 8 soldats pour les tours de guet · 3 gardes armés de lances protègent 9 cases · relié par un chemin' },
@@ -662,7 +664,7 @@ function canBuild(tl,t){
   if (tl==='mine'){ if (!t.ore) return {ok:false,why:'Les mines s’ouvrent dans une paroi marquée de pierres colorées.'}; }
   else if (t.ore) return {ok:false,why:'Ce filon est réservé à une mine.'};
   if (tl!=='chemin' && access.has(i)) return {ok:false,why:'Devant l’entrée d’un filon : gardez la place pour un chemin.'};
-  if ((tl==='riziere'||tl==='maison'||tl==='bucheron') && t.forest) return {ok:false,why:'Forêt : tracez un chemin pour défricher, ou construisez à côté.'};
+  if ((tl==='riziere'||tl==='maison'||tl==='bucheron'||tl==='pecheur') && t.forest) return {ok:false,why:'Forêt : tracez un chemin pour défricher, ou construisez à côté.'};
   if (tl==='riziere'){
     if (t.h>6) return {ok:false,why:'Trop haut et trop en pente pour une rizière.'};
     if (!near(t,2,n=>n.river)) return {ok:false,why:'Une rizière doit être à 2 cases d’une rivière.'};
@@ -670,6 +672,7 @@ function canBuild(tl,t){
   if (tl==='maison' && t.h>7) return {ok:false,why:'Trop escarpé pour habiter.'};
   if ((tl==='tour'||tl==='rempart') && t.h>16) return {ok:false,why:'Trop haut dans la montagne.'};
   if (tl==='bucheron' && !near(t,1,n=>n.forest)) return {ok:false,why:'Un bûcheron doit toucher une forêt.'};
+  if (tl==='pecheur'){ if (t.h>7) return {ok:false,why:'Trop haut : un pêcheur s’installe sur la rive.'}; if (!fishRate(t)) return {ok:false,why:'Un pêcheur doit toucher la mer ou une rivière.'}; }
   if (!afford(d.cost)) return {ok:false,why:`Il faut ${costTxt(d.cost)}.`};
   return {ok:true};
 }
@@ -724,19 +727,33 @@ function act(tl,t){
 }
 
 /* ---------- Simulation au jour le jour ---------- */
-let rizRate = 0;
+let rizRate = 0, fishEat = 0;
+const FISH_SHARE = .5;                          // le poisson couvre au plus la moitié des repas
 // Enceinte : ce que les remparts entourent complètement (on ne peut pas l'atteindre depuis le bord de la carte sans franchir un rempart ou une rivière)
+// Enceinte : terres qu'on ne peut atteindre depuis l'extérieur de vos terres sans franchir un rempart ou un obstacle naturel
+// (mer, rivière, canal, montagne d'au moins MOUNT_WALL niveaux). Seules comptent les poches qui touchent au moins un rempart.
+const MOUNT_WALL = 12;                                   // 800 m
+const natWall = t => t.water || t.river || t.h >= MOUNT_WALL;
 function computeWalls(){
   walls = []; const wm = new Uint8Array(N*N);
   for (const [i,b] of bld) if (isWallB(b)){ wm[i]=1; walls.push([tiles[i].x, tiles[i].y, b.type==='porte' ? 2 : WALL_LV[lvlOf(b)-1].pts]); }
-  encl = new Uint8Array(N*N); if (walls.length<4) return;
+  encl = new Uint8Array(N*N); if (!walls.length) return;
+  for (const t of tiles){ const j=I(t.x,t.y); if (!wm[j] && natWall(t)) wm[j]=2; }
   const out = new Uint8Array(N*N), q=[];
-  for (const t of tiles) if (t.river && !t.water) wm[I(t.x,t.y)] = 2;      // les rivières et canaux servent de douves
   const push = j => { if (!wm[j] && !out[j]){ out[j]=1; q.push(j); } };
+  for (let j=0;j<N*N;j++) if (!terr[j]) push(j);                                     // l'extérieur : tout ce qui n'est pas à vous
   for (let k=0;k<N;k++){ push(I(k,0)); push(I(k,N-1)); push(I(0,k)); push(I(N-1,k)); }
   while (q.length){ const j=q.pop(), x=j%N, y=(j/N)|0;
     for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) if ((dx||dy) && inB(x+dx,y+dy)) push(I(x+dx,y+dy)); }
-  for (let j=0;j<N*N;j++) if (!out[j] && !wm[j]) encl[j]=1;
+  // poches fermées : on ne garde que celles qu'au moins un rempart contribue à fermer
+  const comp = new Int32Array(N*N).fill(-1); let id=0;
+  for (let j0=0;j0<N*N;j0++){ if (out[j0] || wm[j0] || comp[j0]>=0) continue;
+    const cells=[j0]; comp[j0]=id; let touches=false;
+    for (let c=0;c<cells.length;c++){ const j=cells[c], x=j%N, y=(j/N)|0;
+      for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){ if (!(dx||dy) || !inB(x+dx,y+dy)) continue; const n=I(x+dx,y+dy);
+        if (wm[n]===1) touches=true; else if (!wm[n] && !out[n] && comp[n]<0){ comp[n]=id; cells.push(n); } } }
+    if (touches) for (const j of cells) encl[j]=1;
+    id++; }
 }
 // Armée : les soldats sont des habitants logés dans les postes de garde (8) et le château (30)
 let soldierCap = 0, soldierUsed = 0, soldierNeed = 0;
@@ -750,7 +767,7 @@ function equipNeeds(){
   for (const [,b] of bld){ if (!B[b.type].mil || b.build) continue; need[tierOf(b)-1] += Math.max(0, workersOf(b)-(b.arms||0)); }
   return need;
 }
-const STORE_WHERE = { riz:'un grenier à riz', bois:'un entrepôt de bois', pierre:'un dépôt de pierre', tetsu:'un entrepôt de minerais', dou:'un entrepôt de minerais', kin:'un entrepôt de minerais', hagane:'un arsenal', yari:'un arsenal', armes:'un arsenal', yoroi:'un arsenal' };
+const STORE_WHERE = { sakana:'un grenier à riz', riz:'un grenier à riz', bois:'un entrepôt de bois', pierre:'un dépôt de pierre', tetsu:'un entrepôt de minerais', dou:'un entrepôt de minerais', kin:'un entrepôt de minerais', hagane:'un arsenal', yari:'un arsenal', armes:'un arsenal', yoroi:'un arsenal' };
 function allocate(){
   computeNet(); computeWalls(); computeSoldierCap(); computeStore(); computeMineLinks();
   { const L=[]; for (const [i,b] of bld) if (b.type==='mine'){ const t=tiles[i]; L.push(i+':'+mineLinkLv(t,t.ore)+':'+mineLinkLv(t,'pierre')); }
@@ -758,7 +775,7 @@ function allocate(){
       const best = up.map(([i,a,b])=>Math.max(+a,+b)).filter(v=>v>0);
       if (best.length) setTimeout(()=>toast(`Mine reliée à son entrepôt par la route : production ×${fr(ROAD_LV[Math.max(...best)-1].mine)}`),400); }
     linkSig=sig; }
-  let free = Math.floor(pop), prodRiz = 0; soldierUsed = 0; soldierNeed = 0;
+  let free = Math.floor(pop), prodRiz = 0, prodFish = 0; soldierUsed = 0; soldierNeed = 0;
   // les postes de garde et le château passent d'abord : ce sont eux qui logent les soldats des tours
   const order = [...bld].sort((a,b)=>(SOLDIER_CAP[b[1].type]?1:0)-(SOLDIER_CAP[a[1].type]?1:0));
   for (const [i,b] of order){
@@ -778,8 +795,9 @@ function allocate(){
     if (b.type==='armurerie' && !b.build && !armoryPick(b)){ b.state = armoryPick(b,true) ? 'acier' : 'repos'; continue; }
     free -= wk;
     if (d.prod && d.prod.riz) prodRiz += d.prod.riz + (encl[i]?1:0);
+    if (b.type==='pecheur') prodFish += fishRate(t);
   }
-  rizRate = prodRiz - pop*EAT;
+  { const need=pop*EAT; fishEat = Math.min(need*FISH_SHARE, (res.sakana||0)+prodFish); rizRate = prodRiz - (need-fishEat); }
   recomputeTerr();
 }
 // Armurerie : ce qu'elle forge aujourd'hui. Auto = d'abord ce qui manque aux soldats en poste,
@@ -816,6 +834,7 @@ function runDay(){
     if (!d.prod || b.build) continue;
     const gains = Object.assign({}, d.prod); if (b.type==='mine') gains[t.ore] = ORES[t.ore].rate;
     if (b.type==='riziere' && encl[i]) gains.riz += 1;
+    if (b.type==='pecheur') gains.sakana = fishRate(t);
     let stored = 0; for (const [k,v] of Object.entries(gains)) stored += gain(k, v*km(k));
     if (floaters.length<90){
       const k = b.type==='mine' ? t.ore : Object.keys(d.prod)[0];
@@ -823,13 +842,13 @@ function runDay(){
       floaters.push({x:sx,y:sy,txt: stored>0 ? '+'+(+(gains[k]*km(k)).toFixed(1))+RES[k].k : RES[k].k+' plein',c: stored>0 ? RES[k].color : '#ffc4b0',t0:now+Math.random()*400});
     }
   }
-  res.riz -= pop*EAT;
+  { const need=pop*EAT, f=Math.min(need*FISH_SHARE, res.sakana||0); res.sakana=(res.sakana||0)-f; res.riz -= need-f; }
   const cap = capOf();
   if (res.riz < 0){
     const lost = Math.min(pop, Math.max(1, Math.ceil(-res.riz/4)));
     res.riz = 0; pop -= lost;
     toast(`Famine : ${lost} habitant${lost>1?'s quittent':' quitte'} le village. Construisez des rizières.`);
-  } else if (pop < cap && res.riz >= pop*EAT){
+  } else if (pop < cap && res.riz + (res.sakana||0) >= pop*EAT){
     const g = Math.min(cap-pop, 1 + Math.floor(pop/8));
     pop += g;
     const hs=[...bld].filter(([,b])=>isHouse(b));
@@ -2052,8 +2071,57 @@ function drawGuardD(h){
   nobori(h,-.55,E+.1,0,5.2,'#b4462e','#f3ecdc'); nobori(h,.55,E+.1,0,5.2,'#f3ecdc','#b4462e');
 }
 STORES.garde = drawGuardD;
+/* --- Cabane de pêcheur : chaume, séchoir à poissons, filets sur perches, barque tirée au sec, nasses --- */
+function boat(h,a0,a1,b,z=0){
+  const [x0,y0]=h.L(a0,b,z), [x1,y1]=h.L(a1,b,z), mx=(x0+x1)/2, my=(y0+y1)/2;
+  ctx.fillStyle='rgba(20,16,12,.25)'; ctx.beginPath(); ctx.ellipse(mx,my+1,Math.hypot(x1-x0,y1-y0)/2+1,2.2,Math.atan2(y1-y0,x1-x0),0,7); ctx.fill();
+  ctx.save(); ctx.translate(mx,my); ctx.rotate(Math.atan2(y1-y0,x1-x0)); const L=Math.hypot(x1-x0,y1-y0)/2;
+  ctx.fillStyle='#6b4526'; ctx.beginPath(); ctx.moveTo(-L,-1.6); ctx.quadraticCurveTo(0,-2.6,L+1.4,-2.4); ctx.lineTo(L,0.6); ctx.quadraticCurveTo(0,1.6,-L+.6,.8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#9b6a3b'; ctx.beginPath(); ctx.moveTo(-L+.4,-1.6); ctx.quadraticCurveTo(0,-2.3,L+1.1,-2.3); ctx.lineTo(L+.6,-1.3); ctx.quadraticCurveTo(0,-1.1,-L+.6,-.8); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#4a3220'; ctx.lineWidth=.35; ctx.beginPath(); for (const f of [-.4,.15,.6]){ ctx.moveTo(L*f,-2.1); ctx.lineTo(L*f,.6); } ctx.stroke();
+  ctx.strokeStyle='#8a6440'; ctx.lineWidth=.45; ctx.beginPath(); ctx.moveTo(-L*.3,-1.9); ctx.lineTo(L*.9,-4.2); ctx.stroke();       // aviron
+  ctx.restore();
+}
+function fishRack(h,a,b0,b1,z){                   // perche horizontale et poissons pendus à sécher
+  for (const b of [b0,b1]){ ctx.strokeStyle=shade('#6b4a2a',h.kB); ctx.lineWidth=.55; ctx.beginPath(); ctx.moveTo(...h.L(a,b,0)); ctx.lineTo(...h.L(a,b,z+.25)); ctx.stroke(); }
+  ctx.strokeStyle='#5a3d22'; ctx.lineWidth=.45; ctx.beginPath(); ctx.moveTo(...h.L(a,b0,z)); ctx.lineTo(...h.L(a,b1,z)); ctx.stroke();
+  for (let b=b0+.05; b<b1-.02; b+=.075){ const [x,y]=h.L(a,b,z);
+    ctx.strokeStyle='#3a2a1c'; ctx.lineWidth=.2; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+.6); ctx.stroke();
+    ctx.fillStyle='#8fa7b0'; ctx.beginPath(); ctx.ellipse(x,y+1.9,.55,1.35,0,0,7); ctx.fill();
+    ctx.fillStyle='#c9d6da'; ctx.beginPath(); ctx.ellipse(x-.15,y+1.7,.22,.9,0,0,7); ctx.fill();
+    poly([x-.55,y+3.3, x+.55,y+3.3, x,y+2.7],'#7d939b'); }
+}
+function netPoles(h,a0,a1,b,z){                   // filet tendu entre deux perches
+  for (const a of [a0,a1]){ ctx.strokeStyle=shade('#6b4a2a',h.kA); ctx.lineWidth=.55; ctx.beginPath(); ctx.moveTo(...h.L(a,b,0)); ctx.lineTo(...h.L(a,b,z+.3)); ctx.stroke(); }
+  const P=(f,zz)=>h.L(a0+(a1-a0)*f,b,zz);
+  ctx.strokeStyle='rgba(60,50,40,.55)'; ctx.lineWidth=.2; ctx.beginPath();
+  for (let f=0; f<=1.001; f+=.1){ ctx.moveTo(...P(f,z)); ctx.lineTo(...P(f,z*.45)); }
+  for (let zz=z*.45; zz<=z+.001; zz+=(z*.55)/5){ ctx.moveTo(...P(0,zz)); ctx.lineTo(...P(1,zz)); }
+  ctx.stroke();
+  ctx.fillStyle='#d8c08a'; for (let f=.05; f<1; f+=.18){ const [x,y]=P(f,z*.45); ctx.beginPath(); ctx.arc(x,y,.35,0,7); ctx.fill(); }   // flotteurs
+}
+function nasse(h,a,b){ const [x,y]=h.L(a,b,0); ctx.fillStyle='#a8884f'; ctx.beginPath(); ctx.ellipse(x,y-1.2,1.1,1.5,0,0,7); ctx.fill();
+  ctx.strokeStyle='#6f5530'; ctx.lineWidth=.25; ctx.beginPath(); for (const d of [-.6,0,.6]){ ctx.moveTo(x+d,y-2.5); ctx.lineTo(x+d*.8,y+.1); } ctx.moveTo(x-1,y-1.4); ctx.lineTo(x+1,y-1.4); ctx.stroke(); }
+const FISHER = h => {
+  shadowH(h,-.42,.3,-.42,.2);
+  h.Q([[-.48,-.48,0],[.48,-.48,0],[.48,.48,0],[-.48,.48,0]],'#c9b98e');                  // sable et galets
+  for (const [a,b,r] of [[.3,.35,.9],[-.35,.4,.7],[.4,-.1,.6],[.05,.42,.5]]){ const [x,y]=h.L(a,b,0); ctx.fillStyle='rgba(120,110,90,.35)'; ctx.beginPath(); ctx.ellipse(x,y,r*1.5,r*.7,0,0,7); ctx.fill(); }
+  netPoles(h,-.44,.1,-.44,1.5);
+  hbox(h,-.4,.05,-.38,.02,0,.16,STONE);
+  hbox(h,-.38,.03,-.36,0,.16,1.45,'#8e6b47',false);
+  { const f=FB(h,-.38,.03,0); planks(f,.16,1.45); door(f,.55,.85,.16,1.2); noren(f,.55,.85,.16,1.2,'#2f4a6b'); fline(f,0,1.3,1,1.3,DARKW,.5); }
+  { const f=FA(h,-.36,0,.03); planks(f,.16,1.45); lattice(f,.3,.7,.6,1.05); }
+  kiri(h,-.42,.07,-.4,.04,1.45,1.6,THA,'#8e6b47',{kind:'thatch',ov:.08,thick:.4});
+  fishRack(h,.28,-.42,.08,1.15);
+  nasse(h,-.3,.24); nasse(h,-.16,.32);
+  boat(h,-.02,.36,.2);
+  { const [x,y]=h.L(.38,.15,0); ctx.fillStyle='#7a5532'; ctx.fillRect(x-1.2,y-2.2,2.4,2.2); ctx.fillStyle='#8fa7b0'; ctx.beginPath(); ctx.ellipse(x,y-2.3,1.2,.5,0,0,7); ctx.fill(); }   // baquet de poissons
+};
+function fisherSprite(t,sx,sy){ const A=(hash(t.y*3+2,t.x*5+1)<.5)!==((rot&1)===1); blit('P'+(A?1:0), ()=>FISHER(HF(A)), sx, sy); }
+const fishRate = t => near(t,1,n=>n.water) ? 6 : near(t,1,n=>n.river) ? 4 : 0;
 function drawBuilding(b,t,sx,sy){
   switch(b.type){
+    case 'pecheur': fisherSprite(t,sx,sy); break;
     case 'forge': forgeSprite(t,b,sx,sy); break;
     case 'tour': drawWatch(t,b,sx,sy); return;
     case 'rempart': drawWall(t,b,sx,sy); return;
@@ -2921,7 +2989,9 @@ const $ = id => document.getElementById(id);
 function refreshUI(){ if (pending) showPlace(); renderRes(); updateBadge(); $('dayLbl').textContent = `Jour ${day}`; if (!selected) showInfo(); else refreshInfoLight(); }
 function renderRes(){
   const cap = capOf();
-  const chips = [['pop', `${Math.floor(pop)}/${cap}`], ['riz', Math.floor(res.riz)], ['bois', Math.floor(res.bois)]];
+  const chips = [['pop', `${Math.floor(pop)}/${cap}`], ['riz', Math.floor(res.riz)]];
+  if ((res.sakana||0)>0 || [...bld.values()].some(b=>b.type==='pecheur')) chips.push(['sakana', Math.floor(res.sakana||0)]);
+  chips.push(['bois', Math.floor(res.bois)]);
   if (era>=2 || res.pierre>0) chips.push(['pierre', Math.floor(res.pierre)]);
   for (const k of ['tetsu','dou','kin']) if (res[k]>0) chips.push([k, Math.floor(res[k])]);
   const hasF = [...bld.values()].some(b=>b.type==='forge'||b.type==='armurerie');
@@ -2933,7 +3003,7 @@ function renderRes(){
   $('res').innerHTML = chips.map(([k,v])=>{ const c=storeCap[k], full = c && (res[k]||0) >= c-1e-6;
     return `<div class="chip${(k==='riz'&&rizRate<0)||full?' warn':''}${resSel===k?' on':''}" data-k="${k}" role="button" tabindex="0" title="${RX[k].name}${c?` · ${Math.floor(res[k]||0)} / ${c}${full?' (plein)':''}`:''}${k==='riz'?` (${rizRate>=0?'+':''}${rizRate.toFixed(1)} par jour)`:''}"><b style="background:${RX[k].color}${k==='sold'?';color:#fff':''}">${RX[k].k}</b>${v}${fill(k)}</div>`; }).join('');
 }
-const TOOL_LIST = ['riziere','maison','bucheron','kura_riz','kura_bois','defricher','canal','chemin','pont','mine','kura_ishi','kura_kane','ameliorer','forge','armurerie','kura_arme','garde','tour','rempart','temple','chateau','demolir'];
+const TOOL_LIST = ['riziere','maison','bucheron','pecheur','kura_riz','kura_bois','defricher','canal','chemin','pont','mine','kura_ishi','kura_kane','ameliorer','forge','armurerie','kura_arme','garde','tour','rempart','temple','chateau','demolir'];
 const DEFRICHER = { k:'伐', name:'Défricher', era:1, cost:null, hint:'Rase la forêt case par case · +3 木 par case' };
 const CANAL = { k:'渠', name:'Canal', era:1, cost:{bois:3}, hint:'Prolonge une rivière ou un canal d’une case' };
 const toolDef = id => id==='ameliorer' ? {k:'改',name:'Améliorer',cost:B.machiya.cost,era:2}
@@ -3006,6 +3076,7 @@ function goalsHTML(){
   const g1 = [
     [n('riziere')>=2, 'Cultiver 2 rizières', `${Math.min(2,n('riziere'))}/2`],
     [n('bucheron')>=1, 'Installer un bûcheron', ''],
+    [n('pecheur')>=1, 'Installer un pêcheur au bord de l’eau', ''],
     [n('kura_riz')>=1, 'Bâtir un grenier à riz', ''],
     [tiles.some(t=>t.cleared), 'Défricher une parcelle de forêt', ''],
     [pop>=ERA2_POP, `Atteindre ${ERA2_POP} habitants`, `${Math.floor(pop)}/${ERA2_POP}`]
@@ -3054,9 +3125,11 @@ function resFlow(k){
     if (b.type==='forge'){ const o=FORGE_LV[lvlOf(b)-1].out; if (k==='hagane') add(prod,'Forges',o); if (k==='tetsu') add(cons,'Forges',2*o); if (k==='bois') add(cons,'Forges (charbon)',2*o); continue; }
     if (b.type==='armurerie'){ const E=armoryPick(b); if (!E) continue; const o=ARM_LV[lvlOf(b)-1].out;
       if (E.key===k) add(prod,`Armurerie · ${E.name.toLowerCase()}s`,o); if (E.cost[k]) add(cons,`Armurerie · ${E.name.toLowerCase()}s`,E.cost[k]*o); continue; }
+    if (b.type==='pecheur'){ if (k==='sakana') add(prod, fishRate(t)>=6?'Pêcheurs en mer':'Pêcheurs en rivière', fishRate(t)); continue; }
     if (d.prod && d.prod[k]) add(prod, d.name+(b.type==='riziere'?'s':b.type==='bucheron'?'s':''), d.prod[k] + (b.type==='riziere'&&encl[i]?1:0));
   }
-  if (k==='riz') add(cons, `Habitants (${Math.floor(pop)} × ${EAT})`, pop*EAT);
+  if (k==='riz') add(cons, `Habitants (${Math.floor(pop)} × ${EAT}${fishEat>0?', moins le poisson':''})`, pop*EAT-fishEat);
+  if (k==='sakana') add(cons, `Habitants (jusqu’à la moitié des repas)`, fishEat);
   const P=[...prod].map(([l,e])=>({l,n:e.n,v:e.v})), C=[...cons].map(([l,e])=>({l,n:e.n,v:e.v}));
   return { P, C, net: P.reduce((a,x)=>a+x.v,0)-C.reduce((a,x)=>a+x.v,0) };
 }
@@ -3153,6 +3226,7 @@ function showInfo(){
     if (workersOf(b)){ let st = b.build ? (b.state!=='ok' ? 'bras' : b.build.wait ? 'wait' : 'site') : b.state; if (st==='route' && !isMine) st='route2'; const [c,l] = STATE[st]; rows += `<dt>État</dt><dd><span class="state ${c}">${l}${b.build&&b.build.wait&&b.build.missing?' : '+b.build.missing.join(' '):''}</span></dd><dt>${b.build?'Charpentiers':d.mil?'Soldats':b.type==='armurerie'?'Armuriers':b.type==='forge'?'Forgerons':'Ouvriers'}</dt><dd>${workersOf(b)}</dd>`;
       const r1 = (v,k) => +(v*mult*(isMine?mineLink(t,k):1)).toFixed(2);
       const p = Object.entries(d.prod||{}).map(([k,v])=>`${fr(r1(v,k))} ${RES[k].k}`); if (isMine) p.push(`${fr(r1(ORES[t.ore].rate,t.ore))} ${RES[t.ore].k}`);
+      if (b.type==='pecheur') p.splice(0, p.length, `${fishRate(t)} 魚 (${fishRate(t)>=6?'en mer':'en rivière'})`);
       if (p.length) rows += `<dt>Par jour</dt><dd>${p.join(' + ')}</dd>`; }
     if (d.mil && !b.build){ const g = guardOf(i,b);
       { const E=EQUIP[tierOf(b)-1]; rows += `<dt>Équipés</dt><dd>${Math.min(b.arms||0,workersOf(b))} / ${workersOf(b)} ${E.k} ${E.name.toLowerCase()}${workersOf(b)>1?'s':''}</dd>`; }
@@ -3204,9 +3278,11 @@ function showInfo(){
     acts += `<button class="act alt" id="aDel" type="button">Démolir</button>`;
   } else {
     head = `<div class="bigk">${t.forest?FOREST[t.ftype].k:T.k}</div><div><h2>${t.forest?FOREST[t.ftype].name:T.name}</h2><div class="coord">Parcelle ${t.x}·${t.y}${terr[i]?'':' · hors de vos terres'}</div></div>`;
+    if (natWall(t) && !t.water) rows += `<dt>Obstacle naturel</dt><dd>${t.river?'rivière':'montagne'} : ferme une enceinte comme un rempart</dd>`;
+    if (t.water) rows += `<dt>Obstacle naturel</dt><dd>la mer ferme une enceinte comme un rempart</dd>`;
     rows += `<dt>Altitude</dt><dd>${alt}</dd><dt>Filon</dt><dd>${t.ore?RES[t.ore].k+' '+RES[t.ore].name:'—'}</dd>`;
     if (t.ore && !faceOf(t)) rows += `<dt>Paroi</dt><dd>de l’autre côté, tournez la vue</dd>`;
-    const opts = ['riziere','maison','bucheron','chemin','pont','mine','tour'].filter(k=>canBuild(k,t).ok);
+    const opts = ['riziere','maison','bucheron','pecheur','chemin','pont','mine','tour'].filter(k=>canBuild(k,t).ok);
     if (encl[i]) rows += `<dt>Enceinte</dt><dd>à l’abri des remparts</dd>`;
     acts = opts.map(k=>`<button class="act" data-b="${k}" type="button">${B[k].k} ${B[k].name} · ${costTxt(B[k].cost)}</button>`).join('');
     let extra = '';
@@ -3367,7 +3443,7 @@ addEventListener('resize',resize);
 function start(s, saved){
   generate(s);
   bld = new Map(); occ = new Map(); selected=null; hover=null; tool='look'; day=1; rot=0; floaters.length=0; paused=false; speed=0; dayAcc=0;
-  res = { riz:40, bois:35, pierre:0, tetsu:0, dou:0, kin:0, hagane:0, yari:0, armes:0, yoroi:0 }; pop = 5; era = 1; encl = new Uint8Array(N*N); walls = [];
+  res = { sakana:0, riz:40, bois:35, pierre:0, tetsu:0, dou:0, kin:0, hagane:0, yari:0, armes:0, yoroi:0 }; pop = 5; era = 1; encl = new Uint8Array(N*N); walls = [];
   if (saved){
     Object.assign(res, saved.res||{}); pop = saved.pop ?? 5; era = saved.era||1; day = saved.day||1; paused = !!saved.paused; speed = saved.speed||0; rot = saved.rot||0;
     for (const i of saved.cleared||[]) if (tiles[i]){ tiles[i].forest=false; tiles[i].cleared=true; paint(tiles[i]); }
@@ -3403,7 +3479,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
 });
-const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 17'; }).observe(vl,{childList:true}), vl.textContent += ' · version 17';
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 18'; }).observe(vl,{childList:true}), vl.textContent += ' · version 18';
 </script>
 </body>
 </html>
