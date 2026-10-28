@@ -247,7 +247,7 @@ const EAT = .6;                                    // riz par habitant et par jo
 const B = {
   riziere:  { k:'田', name:'Rizière',          era:1, cost:{bois:5},  workers:2, prod:{riz:7},  hint:'Terrain plat, à 2 cases d’une rivière' },
   maison:   { k:'家', name:'Maison',           era:1, cost:{bois:8},  cap:4,                   hint:'Loge 4 habitants · range 20 米 et 12 木' },
-  pecheur:  { k:'漁', name:'Pêcheur',          era:1, cost:{bois:10}, workers:2, prod:{sakana:4}, hint:'Au bord de l’eau · 6 魚 par jour en mer, 4 en rivière · le poisson nourrit jusqu’à la moitié du village' },
+  pecheur:  { k:'漁', name:'Pêcheur',          era:1, cost:{bois:10}, workers:2, prod:{sakana:6}, hint:'Au bord de la mer · 6 魚 par jour · le poisson nourrit jusqu’à la moitié du village' },
   bucheron: { k:'木', name:'Bûcheron',         era:1, cost:{bois:6},  workers:2, prod:{bois:5}, hint:'À côté d’une forêt' },
   chemin:   { k:'道', name:'Chemin',           era:2, cost:{bois:1},                           hint:'Monte d’un niveau par case au plus' },
   pont:     { k:'橋', name:'Pont en bois',     era:2, cost:{bois:6},                           hint:'Touchez une rive puis l’autre : le pont enjambe toute l’eau entre les deux' },
@@ -672,7 +672,7 @@ function canBuild(tl,t){
   if (tl==='maison' && t.h>7) return {ok:false,why:'Trop escarpé pour habiter.'};
   if ((tl==='tour'||tl==='rempart') && t.h>16) return {ok:false,why:'Trop haut dans la montagne.'};
   if (tl==='bucheron' && !near(t,1,n=>n.forest)) return {ok:false,why:'Un bûcheron doit toucher une forêt.'};
-  if (tl==='pecheur'){ if (t.h>7) return {ok:false,why:'Trop haut : un pêcheur s’installe sur la rive.'}; if (!fishRate(t)) return {ok:false,why:'Un pêcheur doit toucher la mer ou une rivière.'}; }
+  if (tl==='pecheur'){ if (t.h>7) return {ok:false,why:'Trop haut : un pêcheur s’installe sur la rive.'}; if (!fishRate(t)) return {ok:false,why:'Une cabane de pêche ne s’installe qu’au bord de la mer.'}; }
   if (!afford(d.cost)) return {ok:false,why:`Il faut ${costTxt(d.cost)}.`};
   return {ok:true};
 }
@@ -791,6 +791,7 @@ function allocate(){
       if (take>0){ res[E.key] -= take; b.arms = (b.arms||0)+take; }
       if ((b.arms||0) < wk){ b.state='armes'; continue; }
       soldierUsed += wk; }
+    if (b.type==='pecheur' && !fishRate(t)){ b.state='mer'; continue; }   // anciennes cabanes au bord d'une rivière
     if (b.type==='forge' && (res.tetsu<2 || res.bois<2)){ b.state='fer'; continue; }
     if (b.type==='armurerie' && !b.build && !armoryPick(b)){ b.state = armoryPick(b,true) ? 'acier' : 'repos'; continue; }
     free -= wk;
@@ -2118,7 +2119,7 @@ const FISHER = h => {
   { const [x,y]=h.L(.38,.15,0); ctx.fillStyle='#7a5532'; ctx.fillRect(x-1.2,y-2.2,2.4,2.2); ctx.fillStyle='#8fa7b0'; ctx.beginPath(); ctx.ellipse(x,y-2.3,1.2,.5,0,0,7); ctx.fill(); }   // baquet de poissons
 };
 function fisherSprite(t,sx,sy){ const A=(hash(t.y*3+2,t.x*5+1)<.5)!==((rot&1)===1); blit('P'+(A?1:0), ()=>FISHER(HF(A)), sx, sy); }
-const fishRate = t => near(t,1,n=>n.water) ? 6 : near(t,1,n=>n.river) ? 4 : 0;
+const fishRate = t => near(t,1,n=>n.water) ? 6 : 0;   // en mer uniquement
 function drawBuilding(b,t,sx,sy){
   switch(b.type){
     case 'pecheur': fisherSprite(t,sx,sy); break;
@@ -3103,7 +3104,7 @@ function goalsHTML(){
 }
 const STATE = { site:['ok','Chantier en cours'], wait:['bad','Chantier en attente de matériaux'], ok:['ok','En activité'], bras:['bad','Manque de bras'], route:['bad','Pas de chemin relié au village devant l’entrée'],
   route2:['bad','Pas relié au village par un chemin'], armes:['bad','Soldats pas encore équipés'], fer:['bad','Manque de minerai (2 鉄) ou de bois (2 木)'],
-  soldats:['bad','Pas assez de soldats : construisez un poste de garde'], acier:['bad','Manque d’acier 鋼 (ou de cuivre 銅 pour les armures)'], repos:['ok','Au repos : rien à forger pour l’instant'] };
+  soldats:['bad','Pas assez de soldats : construisez un poste de garde'], acier:['bad','Manque d’acier 鋼 (ou de cuivre 銅 pour les armures)'], repos:['ok','Au repos : rien à forger pour l’instant'], mer:['bad','Trop loin de la mer : la pêche ne se fait qu’en mer'] };
 let lastInfoKey = '';
 /* ---------- Fiche d'une ressource (touchez un compteur en haut) ---------- */
 let resSel = null;
@@ -3125,7 +3126,7 @@ function resFlow(k){
     if (b.type==='forge'){ const o=FORGE_LV[lvlOf(b)-1].out; if (k==='hagane') add(prod,'Forges',o); if (k==='tetsu') add(cons,'Forges',2*o); if (k==='bois') add(cons,'Forges (charbon)',2*o); continue; }
     if (b.type==='armurerie'){ const E=armoryPick(b); if (!E) continue; const o=ARM_LV[lvlOf(b)-1].out;
       if (E.key===k) add(prod,`Armurerie · ${E.name.toLowerCase()}s`,o); if (E.cost[k]) add(cons,`Armurerie · ${E.name.toLowerCase()}s`,E.cost[k]*o); continue; }
-    if (b.type==='pecheur'){ if (k==='sakana') add(prod, fishRate(t)>=6?'Pêcheurs en mer':'Pêcheurs en rivière', fishRate(t)); continue; }
+    if (b.type==='pecheur'){ if (k==='sakana') add(prod, 'Pêcheurs', fishRate(t)); continue; }
     if (d.prod && d.prod[k]) add(prod, d.name+(b.type==='riziere'?'s':b.type==='bucheron'?'s':''), d.prod[k] + (b.type==='riziere'&&encl[i]?1:0));
   }
   if (k==='riz') add(cons, `Habitants (${Math.floor(pop)} × ${EAT}${fishEat>0?', moins le poisson':''})`, pop*EAT-fishEat);
@@ -3226,7 +3227,7 @@ function showInfo(){
     if (workersOf(b)){ let st = b.build ? (b.state!=='ok' ? 'bras' : b.build.wait ? 'wait' : 'site') : b.state; if (st==='route' && !isMine) st='route2'; const [c,l] = STATE[st]; rows += `<dt>État</dt><dd><span class="state ${c}">${l}${b.build&&b.build.wait&&b.build.missing?' : '+b.build.missing.join(' '):''}</span></dd><dt>${b.build?'Charpentiers':d.mil?'Soldats':b.type==='armurerie'?'Armuriers':b.type==='forge'?'Forgerons':'Ouvriers'}</dt><dd>${workersOf(b)}</dd>`;
       const r1 = (v,k) => +(v*mult*(isMine?mineLink(t,k):1)).toFixed(2);
       const p = Object.entries(d.prod||{}).map(([k,v])=>`${fr(r1(v,k))} ${RES[k].k}`); if (isMine) p.push(`${fr(r1(ORES[t.ore].rate,t.ore))} ${RES[t.ore].k}`);
-      if (b.type==='pecheur') p.splice(0, p.length, `${fishRate(t)} 魚 (${fishRate(t)>=6?'en mer':'en rivière'})`);
+      if (b.type==='pecheur') p.splice(0, p.length, `${fishRate(t)} 魚`);
       if (p.length) rows += `<dt>Par jour</dt><dd>${p.join(' + ')}</dd>`; }
     if (d.mil && !b.build){ const g = guardOf(i,b);
       { const E=EQUIP[tierOf(b)-1]; rows += `<dt>Équipés</dt><dd>${Math.min(b.arms||0,workersOf(b))} / ${workersOf(b)} ${E.k} ${E.name.toLowerCase()}${workersOf(b)>1?'s':''}</dd>`; }
@@ -3479,7 +3480,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => {
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloaded){ reloaded = true; location.reload(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(()=>{});
 });
-const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 18'; }).observe(vl,{childList:true}), vl.textContent += ' · version 18';
+const vl = document.getElementById('seedLbl'); if (vl) new MutationObserver(()=>{ if (!vl.textContent.includes('version')) vl.textContent += ' · version 19'; }).observe(vl,{childList:true}), vl.textContent += ' · version 19';
 </script>
 </body>
 </html>
